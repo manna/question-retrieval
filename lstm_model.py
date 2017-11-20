@@ -61,8 +61,9 @@ class LSTMRetrieval(nn.Module):
         # Before we've done anything, we dont have any hidden state.
         # Refer to the Pytorch documentation to see exactly why they have this dimensionality.
         # The axes semantics are (num_layers, minibatch_size, hidden_dim)
-        return (Variable(torch.zeros(1, 1, self.hidden_dim)),
-                Variable(torch.zeros(1, 1, self.hidden_dim)))
+        h0 = Variable(torch.zeros(1, 1, self.hidden_dim))
+        c0 = Variable(torch.zeros(1, 1, self.hidden_dim))
+        return (h0, c0)
         
     def forward(self, embeds):
         lstm_out, self.hidden = self.lstm(embeds.view(len(embeds), 1, -1), self.hidden)

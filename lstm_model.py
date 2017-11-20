@@ -111,7 +111,8 @@ for epoch in xrange(100): # again, normally you would NOT do 300 epochs, it is t
     
         # Step 4. Compute the loss, gradients, and update the parameters by calling
         # optimizer.step()
-        loss = max_similarity - similar_cos + (similar_cos == max_similarity).float() * 0.1
+        loss = max_similarity - similar_cos + (similar_cos == max_similarity).float() * 0.1 # this is the loss function
+        # from the paper. Here the last term is a little hacky.
         avg_loss += loss.data[0]
         loss.backward()
         optimizer.step()

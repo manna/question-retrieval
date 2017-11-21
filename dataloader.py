@@ -33,17 +33,11 @@ class Vectorizer():
         """
         return [Vectorizer.vectorize_word(w) for w in s.split()] # + [Vectorizer.vectorize_word('<eos>')]
 
+print "Loading pretrained word vectors..."
 Vectorizer.load_pretrained_vectors()
+
 # print(len(Vectorizer.vectorize_word('ubuntu')))
 # print(len(Vectorizer.vectorize_sentence('ubuntu linux')))
-
-class Question():
-    def __init__(self, title, body):
-        self.title = title
-        self.body = body
-
-    def __repr__(self):
-        return "Question" + repr((self.title, self.body))
 
 class Ubuntu():
     _CORPUS = None
@@ -67,11 +61,10 @@ class Ubuntu():
 
         for line in lines:
             question_id, question_title, question_body = line.split('\t')
-            Ubuntu._CORPUS[question_id] = Question(
-                Vectorizer.vectorize_sentence(question_title), 
-                Vectorizer.vectorize_sentence(question_body)
-                ) 
-        
+            Ubuntu._CORPUS[question_id] = {
+                'title': Vectorizer.vectorize_sentence(question_title),
+                'body': Vectorizer.vectorize_sentence(question_body)
+            }
         return Ubuntu._CORPUS
 
     @staticmethod
@@ -81,7 +74,7 @@ class Ubuntu():
 
         Load a training set of:
 
-        query question, similar question pairs {(q, q')}
+        query question, similar question ids, random question ids
         """
         path = 'askubuntu-master/train_random.txt'
         with open(path) as f:
@@ -89,12 +82,56 @@ class Ubuntu():
         
         CORPUS = Ubuntu.load_corpus()
 
+        data = []
         for line in lines:
             # NOTE: similar_question_ids is a subset of random_question_ids
             query_question_id, similar_question_ids, random_question_ids = line.split('\t')
-            yield ( CORPUS[query_question_id] 
-                  , [CORPUS[id] for id in similar_question_ids.split()]
-                  , [CORPUS[id] for id in random_question_ids.split()]  )
+            data.append({
+                'query_question' : CORPUS[query_question_id],
+                'similar_questions' : [CORPUS[id] for id in similar_question_ids.split()],
+                'random_questions' : [CORPUS[id] for id in random_question_ids.split()]
+                })
+        return data
 
-# for q, s, r in Ubuntu.load_training_data():
-#     pass
+from torch.utils.data import Dataset, DataLoader
+
+class UbuntuDataset(Dataset):
+    def __init__(self):
+        """
+        Loads the Ubuntu training dataset.
+
+        self.data is a list of question groups.
+        Each question group is a dictionary with keys:
+            - query_question
+            - similar_questions
+            - random_questions
+
+        similar_questions is a sublist of random_questions 
+        """
+        self.data = Ubuntu.load_training_data()
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+print "Initializing Ubuntu Dataset..."
+ubuntu_dataset = UbuntuDataset()
+
+"""
+for i in range(4): # or range(len(ubuntu_dataset))
+    data_item = ubuntu_dataset[i]
+    print(data_item['query_question']) # Question(title, body)
+    print(len(data_item['similar_questions'])) # usually 1 or 2
+    print(len(data_item['random_questions'])) # 100
+"""
+
+# print "Loading Ubuntu Dataset..."
+# dataloader = DataLoader(ubuntu_dataset, batch_size=64,
+#                         shuffle=True, num_workers=4)
+
+# for i_batch, sample_batched in enumerate(dataloader):
+#     print(i_batch, sample_batched['query_question'].size(),
+#           sample_batched['similar_questions'].size())
+#     break

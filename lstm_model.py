@@ -72,10 +72,10 @@ class LSTMRetrieval(nn.Module):
 
 def get_embed(question, model):
     model.hidden = model.init_hidden()
-    question_title_w2v = Variable(torch.Tensor(question.title))
+    question_title_w2v = Variable(torch.Tensor(question['title']))
     question_title_embed = model(question_title_w2v)
     model.hidden = model.init_hidden()
-    question_body_w2v = Variable(torch.Tensor(question.body))
+    question_body_w2v = Variable(torch.Tensor(question['body']))
     question_body_embed = model(question_body_w2v)
     return (question_title_embed + question_body_embed)/2
 
@@ -83,11 +83,17 @@ def get_embed(question, model):
 loss_function = nn.CosineSimilarity(dim=2)
 model = LSTMRetrieval(200, 150)
 optimizer = torch.optim.SGD(model.parameters(), lr=0.005)
-# training_data = Ubuntu.load_training_data()
+training_data = Ubuntu.load_training_data()
+print "Training..."
 for epoch in xrange(100): # again, normally you would NOT do 300 epochs, it is toy data
+    print "Epoch {}".format(epoch)
     count = 0
     avg_loss = 0
-    for question, similar_questions, random_questions in Ubuntu.load_training_data():
+    for question_group in training_data:
+        question = question_group['query_question']
+        similar_questions = question_group['similar_questions']
+        random_questions = question_group['random_questions']
+
         # Step 1. Remember that Pytorch accumulates gradients.  We need to clear them out
         # before each instance
         model.zero_grad()
@@ -99,9 +105,8 @@ for epoch in xrange(100): # again, normally you would NOT do 300 epochs, it is t
         similar_cos = loss_function(question_embed, similar_embed)
         # print loss_function(question_embed, similar_embed)
 
-        all_questions = similar_questions + random_questions
         max_similarity = Variable(torch.Tensor([-1]))
-        for q in all_questions:
+        for q in random_questions:
             q_embed = get_embed(q, model)
             cos = loss_function(question_embed, q_embed)
             if max_similarity.data[0] < cos.data[0]:

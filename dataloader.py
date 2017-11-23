@@ -101,8 +101,16 @@ class Ubuntu():
 
 from torch.utils.data import Dataset, DataLoader
 
+to_title = lambda q: q['title']
+to_body = lambda q: q['body']
+to_title_and_body = lambda q: q['title'] + [Vectorizer.END_OF_TITLE] + q['body']
+
 class UbuntuDataset(Dataset):
-    def __init__(self):
+    def __init__(
+        self,
+        to_target_vec=to_title,
+        to_context_vec=to_body
+        ):
         """
         Loads the Ubuntu training dataset.
 
@@ -115,7 +123,6 @@ class UbuntuDataset(Dataset):
         similar_questions is a sublist of random_questions 
         """
         raw_data = Ubuntu.load_training_data()
-        to_seq_vec = lambda q: q['title'] + [Vectorizer.END_OF_TITLE] + q['body']
 
         self.query_vecs = []
         self.other_vecs = []
@@ -123,12 +130,12 @@ class UbuntuDataset(Dataset):
         self.len = 0 # = len(self.query_vecs) = len(self.other_vecs) = len(self.Y)
 
         for example in raw_data:
-            query_vec = to_seq_vec(example['query_question'])
+            query_vec = to_target_vec(example['query_question'])
 
             sim_count = len(example['similar_questions'])
             # The first sim_count random questions are similar.
             for i, other_q in enumerate(example['random_questions']):
-                other_vec = to_seq_vec(other_q)
+                other_vec = to_context_vec(other_q)
                 self.query_vecs.append(query_vec)
                 self.other_vecs.append(other_vec)
                 self.Y.append( 1 if i < sim_count else -1 )

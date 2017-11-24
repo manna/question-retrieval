@@ -101,16 +101,8 @@ class Ubuntu():
 
 from torch.utils.data import Dataset, DataLoader
 
-to_title = lambda q: q['title']
-to_body = lambda q: q['body']
-to_title_and_body = lambda q: q['title'] + [Vectorizer.END_OF_TITLE] + q['body']
-
 class UbuntuDataset(Dataset):
-    def __init__(
-        self,
-        to_target_vec=to_title,
-        to_context_vec=to_body
-        ):
+    def __init__(self):
         """
         Loads the Ubuntu training dataset.
 
@@ -124,20 +116,26 @@ class UbuntuDataset(Dataset):
         """
         raw_data = Ubuntu.load_training_data()
 
-        self.query_vecs = []
-        self.other_vecs = []
+        self.query_titles = []
+        self.query_bodies = []
+        self.other_titles = []
+        self.other_bodies = []
         self.Y = [] # [1, 1, -1, -1, -1, 1, -1, -1 ....]
         self.len = 0 # = len(self.query_vecs) = len(self.other_vecs) = len(self.Y)
 
         for example in raw_data:
-            query_vec = to_target_vec(example['query_question'])
+            query_title = example['query_question']['title']
+            query_body = example['query_question']['body']
 
             sim_count = len(example['similar_questions'])
             # The first sim_count random questions are similar.
             for i, other_q in enumerate(example['random_questions']):
-                other_vec = to_context_vec(other_q)
-                self.query_vecs.append(query_vec)
-                self.other_vecs.append(other_vec)
+                other_title = other_q['title']
+                other_body = other_q['body']
+                self.query_titles.append(query_title)
+                self.query_bodies.append(query_body)
+                self.other_titles.append(other_title)
+                self.other_bodies.append(other_body)
                 self.Y.append( 1 if i < sim_count else -1 )
                 self.len += 1
 
@@ -145,7 +143,8 @@ class UbuntuDataset(Dataset):
         return self.len
 
     def __getitem__(self, idx):
-        return self.query_vecs[idx], self.other_vecs[idx], self.Y[idx] 
+        return (self.query_titles[idx], self.query_bodies[idx],
+                self.other_titles[idx], self.other_bodies[idx], self.Y[idx])
 
 print "Initializing Ubuntu Dataset..."
 ubuntu_dataset = UbuntuDataset()
@@ -179,14 +178,10 @@ def pad(vectorized_seqs):
     # output, _ = torch.nn.utils.rnn.pad_packed_sequence(packed_output)
     # print output
 
-def pad_all(data):
-    """
-    @param data: [ ((query_vec, other_vec), label), ... ]
-    """    
-    query_vecs, other_vecs, Y = zip(*data)
-    query_vecs = pad(query_vecs)
-    other_vecs = pad(other_vecs)
-    return zip(query_vecs, other_vecs, Y)
+def pad_all(data): 
+    q_titles, q_bodies, o_titles, o_bodies, ys = zip(*data)
+    q_titles, q_bodies, o_titles, o_bodies = map(pad, (q_titles, q_bodies, o_titles, o_bodies))
+    return zip(q_titles, q_bodies, o_titles, o_bodies, ys)
 
 from torch.utils.data.dataloader import default_collate
 def batchify(batch):
@@ -214,11 +209,11 @@ if __name__=='__main__':
 
     for i_batch, sample_batched in enumerate(dataloader):
         print("batch #{}".format(i_batch)) 
-        query_vec, other_vec, y = sample_batched
+        query_titles, query_bodies, other_titles, other_bodies, y = sample_batched
         print("query:")
-        print(map(len, query_vec))
+        print(map(len, query_titles))
         print("other:")
-        print(map(len, other_vec))
+        print(map(len, other_titles))
         print("y:")
         print(y)
 

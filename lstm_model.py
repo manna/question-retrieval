@@ -1,8 +1,10 @@
 import torch
 from torch import nn
-from dataloader import Ubuntu
+from torch.utils.data import DataLoader
 from torch.autograd import Variable
 from IPython import embed
+
+from dataloader import UbuntuDataset, batchify
 
 # class LSTM(nn.Module):
 # 	def __init__(self, input_size, hidden_size, num_layers, avg_pool=True):
@@ -70,59 +72,56 @@ class LSTMRetrieval(nn.Module):
         # embed()
         return self.hidden[0] # I think this is right. We want to return h (the visible hidden state) not c (cell state). Might need to debug.
 
-def get_embed(question, model):
-    model.hidden = model.init_hidden()
-    question_title_w2v = Variable(torch.Tensor(question['title']))
-    question_title_embed = model(question_title_w2v)
-    model.hidden = model.init_hidden()
-    question_body_w2v = Variable(torch.Tensor(question['body']))
-    question_body_embed = model(question_body_w2v)
-    return (question_title_embed + question_body_embed)/2
+    def get_embed(self, seq):
+        self.hidden = self.init_hidden()
+        seq_w2v = Variable(seq)
+        return self(seq_w2v)
 
-
-loss_function = nn.CosineSimilarity(dim=2)
+loss_function = nn.CosineEmbeddingLoss()
 model = LSTMRetrieval(200, 150)
 optimizer = torch.optim.SGD(model.parameters(), lr=0.005)
-training_data = Ubuntu.load_training_data()
+# training_data = Ubuntu.load_training_data()
+print "Initializing Ubuntu Dataset..."
+ubuntu_dataset = UbuntuDataset()
+dataloader = DataLoader(
+    ubuntu_dataset,
+    batch_size=1, # 100*n -> n questions.
+    shuffle=False,
+    num_workers=8,
+    collate_fn=batchify
+)
+
 print "Training..."
 for epoch in xrange(100): # again, normally you would NOT do 300 epochs, it is toy data
     print "Epoch {}".format(epoch)
     count = 0
     avg_loss = 0
-    for question_group in training_data:
-        question = question_group['query_question']
-        similar_questions = question_group['similar_questions']
-        random_questions = question_group['random_questions']
 
-        # Step 1. Remember that Pytorch accumulates gradients.  We need to clear them out
-        # before each instance
+    for i_batch, sample_batched in enumerate(dataloader):
+        print "Batch #{}".format(i_batch)
+        query_title, query_body, other_title, other_body, y = sample_batched
+        
+        # Step 1. Remember that Pytorch accumulates gradients. 
+        # We need to clear them out before each instance
         model.zero_grad()
         
-        # Also, we need to clear out the hidden state of the LSTM, detaching it from its
-        # history on the last instance.
-        question_embed = get_embed(question, model)
-        similar_embed = get_embed(similar_questions[0], model)
-        similar_cos = loss_function(question_embed, similar_embed)
-        # print loss_function(question_embed, similar_embed)
+        # Also, we need to clear out the hidden state of the LSTM,
+        # detaching it from its history on the last instance.
+        query_title = model.get_embed(query_title)
+        query_body = model.get_embed(query_body)
+        other_title = model.get_embed(other_title)
+        other_body = model.get_embed(other_body)
 
-        max_similarity = Variable(torch.Tensor([-1]))
-        for q in random_questions:
-            q_embed = get_embed(q, model)
-            cos = loss_function(question_embed, q_embed)
-            if max_similarity.data[0] < cos.data[0]:
-            	max_similarity = cos
+        query_embed = (query_title + query_body) / 2
+        other_embed = (other_title + other_body) / 2
 
-        # print "the max similarity is"
-        # print max_similarity
-    
-        # Step 4. Compute the loss, gradients, and update the parameters by calling
-        # optimizer.step()
-        loss = max_similarity - similar_cos + (similar_cos == max_similarity).float() * 0.1 # this is the loss function
-        # from the paper. Here the last term is a little hacky.
-        avg_loss += loss.data[0]
-        loss.backward()
-        optimizer.step()
+        batch_avg_loss = loss_function(query_embed, other_embed, y)
+
+        avg_loss += batch_avg_loss
         count += 1
+
+        batch_avg_loss.backward()
+        optimizer.step()
 
     avg_loss /= count
     print "average loss for epoch %i was %f"%(epoch,avg_loss)

@@ -104,7 +104,7 @@ class Ubuntu():
 from torch.utils.data import Dataset, DataLoader
 
 class UbuntuDataset(Dataset):
-    def __init__(self):
+    def __init__(self, partition='train'):
         """
         Loads the Ubuntu training dataset.
 
@@ -115,6 +115,8 @@ class UbuntuDataset(Dataset):
             - random_questions
 
         similar_questions is a sublist of random_questions 
+
+        partition: valid options are 'train' or 'val'.
         """
         raw_data = Ubuntu.load_training_data()
 
@@ -124,8 +126,15 @@ class UbuntuDataset(Dataset):
         self.other_bodies = []
         self.Y = [] # [1, 1, -1, -1, -1, 1, -1, -1 ....]
         self.len = 0 # = len(self.query_vecs) = len(self.other_vecs) = len(self.Y)
+        self.partition = partition
+        if self.partition == "train":
+            start_index = 0
+            end_index = len(raw_data)-20000
+        elif self.partition == 'val':
+            start_index = len(raw_data)-20000
+            end_index = len(raw_data)
 
-        for example in raw_data:
+        for example in raw_data[start_index:end_index]:
             query_title = example['query_question']['title']
             query_body = example['query_question']['body']
 

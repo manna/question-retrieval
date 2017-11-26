@@ -78,14 +78,14 @@ class LSTMRetrieval(nn.Module):
         # unpack your output if required
         output, _ = nn.utils.rnn.pad_packed_sequence(packed_output)
 
-        return ht
+        return ht[-1]
 
     def get_embed(self, packed_seq, perm_idx):
         self.hidden = self.init_hidden()
         return self(packed_seq, perm_idx)
 
 batch_size=100
-loss_function = nn.CosineEmbeddingLoss()
+loss_function = nn.CosineEmbeddingLoss(margin=0, size_average=True)
 model = LSTMRetrieval(200, 150, batch_size=batch_size)
 optimizer = torch.optim.SGD(model.parameters(), lr=0.005)
 # training_data = Ubuntu.load_training_data()
@@ -121,6 +121,9 @@ for epoch in xrange(100): # again, normally you would NOT do 300 epochs, it is t
         other_body = model.get_embed(ob_seq, ob_perm)
 
         print "Embedded!"
+        print query_title.size(), query_body.size()
+        print other_title.size(), other_body.size()
+        print ys.size()
 
         query_embed = (query_title + query_body) / 2
         other_embed = (other_title + other_body) / 2

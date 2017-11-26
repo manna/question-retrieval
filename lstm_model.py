@@ -76,16 +76,17 @@ class LSTMRetrieval(nn.Module):
         packed_output, (ht, ct) = self.lstm(packed_input)
 
         # unpack your output if required
-        output, _ = nn.utils.rnn.pad_packed_sequence(packed_output)
+        # output, _ = nn.utils.rnn.pad_packed_sequence(packed_output)
+        
         _, orig_idx = perm_idx.sort(0, descending=False)
-        return ht[-1][orig_idx]
+        return ht[-1][orig_idx] # Return last hidden layer, after unsorting the batch
 
     def get_embed(self, packed_seq, perm_idx):
         self.hidden = self.init_hidden()
         return self(packed_seq, perm_idx)
 
 batch_size=100
-loss_function = nn.CosineEmbeddingLoss(margin=0, size_average=True)
+loss_function = nn.CosineEmbeddingLoss(margin=0, size_average=False)
 model = LSTMRetrieval(200, 150, batch_size=batch_size)
 optimizer = torch.optim.SGD(model.parameters(), lr=0.005)
 # training_data = Ubuntu.load_training_data()
@@ -106,7 +107,7 @@ for epoch in xrange(100): # again, normally you would NOT do 300 epochs, it is t
     avg_loss = 0
 
     for i_batch, (padded_things, ys) in enumerate(dataloader):
-        print("batch #{}".format(i_batch)) 
+        print("Batch #{}".format(i_batch)) 
         (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = padded_things
 
         # Step 1. Remember that Pytorch accumulates gradients. 
@@ -120,16 +121,11 @@ for epoch in xrange(100): # again, normally you would NOT do 300 epochs, it is t
         other_title = model.get_embed(ot_seq, ot_perm)
         other_body = model.get_embed(ob_seq, ob_perm)
 
-        print "Embedded!"
-        print query_title.size(), query_body.size()
-        print other_title.size(), other_body.size()
-        print ys.size()
-
         query_embed = (query_title + query_body) / 2
         other_embed = (other_title + other_body) / 2
 
         batch_avg_loss = loss_function(query_embed, other_embed, ys)
-
+        print "total (sum) loss for batch {} was {}".format(i_batch, batch_avg_loss.data)
         avg_loss += batch_avg_loss
         count += 1
 

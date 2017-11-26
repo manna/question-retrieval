@@ -77,8 +77,8 @@ class LSTMRetrieval(nn.Module):
 
         # unpack your output if required
         output, _ = nn.utils.rnn.pad_packed_sequence(packed_output)
-
-        return ht[-1]
+        _, orig_idx = perm_idx.sort(0, descending=False)
+        return ht[-1][orig_idx]
 
     def get_embed(self, packed_seq, perm_idx):
         self.hidden = self.init_hidden()

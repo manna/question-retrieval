@@ -2,7 +2,6 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
-from IPython import embed
 
 from dataloader import UbuntuDataset, batchify
 
@@ -85,52 +84,53 @@ class LSTMRetrieval(nn.Module):
         self.hidden = self.init_hidden()
         return self(packed_seq, perm_idx)
 
-batch_size=100
-loss_function = nn.CosineEmbeddingLoss(margin=0, size_average=False)
-model = LSTMRetrieval(200, 150, batch_size=batch_size)
-optimizer = torch.optim.SGD(model.parameters(), lr=0.005)
-# training_data = Ubuntu.load_training_data()
-print "Initializing Ubuntu Dataset..."
-ubuntu_dataset = UbuntuDataset()
-dataloader = DataLoader(
-    ubuntu_dataset,
-    batch_size=batch_size, # 100*n -> n questions.
-    shuffle=False,
-    num_workers=8,
-    collate_fn=batchify
-)
+if __name__=='__main__':
+    batch_size=100
+    loss_function = nn.CosineEmbeddingLoss(margin=0, size_average=False)
+    model = LSTMRetrieval(200, 150, batch_size=batch_size)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.005)
+    # training_data = Ubuntu.load_training_data()
+    print "Initializing Ubuntu Dataset..."
+    ubuntu_dataset = UbuntuDataset()
+    dataloader = DataLoader(
+        ubuntu_dataset,
+        batch_size=batch_size, # 100*n -> n questions.
+        shuffle=False,
+        num_workers=8,
+        collate_fn=batchify
+    )
 
-print "Training..."
-for epoch in xrange(100): # again, normally you would NOT do 300 epochs, it is toy data
-    print "Epoch {}".format(epoch)
-    count = 0
-    avg_loss = 0
+    print "Training..."
+    for epoch in xrange(100): # again, normally you would NOT do 300 epochs, it is toy data
+        print "Epoch {}".format(epoch)
+        count = 0
+        avg_loss = 0
 
-    for i_batch, (padded_things, ys) in enumerate(dataloader):
-        print("Batch #{}".format(i_batch)) 
-        (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = padded_things
+        for i_batch, (padded_things, ys) in enumerate(dataloader):
+            print("Batch #{}".format(i_batch)) 
+            (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = padded_things
 
-        # Step 1. Remember that Pytorch accumulates gradients. 
-        # We need to clear them out before each instance
-        model.zero_grad()
-        
-        # Also, we need to clear out the hidden state of the LSTM,
-        # detaching it from its history on the last instance.
-        query_title = model.get_embed(qt_seq, qt_perm)
-        query_body = model.get_embed(qb_seq, qb_perm)
-        other_title = model.get_embed(ot_seq, ot_perm)
-        other_body = model.get_embed(ob_seq, ob_perm)
+            # Step 1. Remember that Pytorch accumulates gradients. 
+            # We need to clear them out before each instance
+            model.zero_grad()
+            
+            # Also, we need to clear out the hidden state of the LSTM,
+            # detaching it from its history on the last instance.
+            query_title = model.get_embed(qt_seq, qt_perm)
+            query_body = model.get_embed(qb_seq, qb_perm)
+            other_title = model.get_embed(ot_seq, ot_perm)
+            other_body = model.get_embed(ob_seq, ob_perm)
 
-        query_embed = (query_title + query_body) / 2
-        other_embed = (other_title + other_body) / 2
+            query_embed = (query_title + query_body) / 2
+            other_embed = (other_title + other_body) / 2
 
-        batch_avg_loss = loss_function(query_embed, other_embed, ys)
-        print "total (sum) loss for batch {} was {}".format(i_batch, batch_avg_loss.data)
-        avg_loss += batch_avg_loss
-        count += 1
+            batch_avg_loss = loss_function(query_embed, other_embed, ys)
+            print "total (sum) loss for batch {} was {}".format(i_batch, batch_avg_loss.data)
+            avg_loss += batch_avg_loss
+            count += 1
 
-        batch_avg_loss.backward()
-        optimizer.step()
+            batch_avg_loss.backward()
+            optimizer.step()
 
-    avg_loss /= count
-    print "average loss for epoch %i was %f"%(epoch,avg_loss)
+        avg_loss /= count
+        print "average loss for epoch %i was %f"%(epoch,avg_loss)

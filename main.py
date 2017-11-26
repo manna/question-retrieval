@@ -1,5 +1,9 @@
 import argparse
-from dataloader import UbuntuDataset
+import torch
+from torch import nn
+from torch.utils.data import DataLoader
+from dataloader import UbuntuDataset, batchify
+from torch.autograd import Variable
 from lstm_model import LSTMRetrieval
 
 def train(train_loader, model, criterion, optimizer, epoch):
@@ -39,7 +43,6 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
 def validation(val_loader, model, criterion):
     print "Validation..."
-    print "Epoch {}".format(epoch)
     count = 0
     avg_loss = 0
 
@@ -68,15 +71,15 @@ def validation(val_loader, model, criterion):
 
 
 
-def main(opts):
-    if opts.model_type == 'lstm':
-        model = LSTMRetrieval(opts.input_size, opts.hidden_size, batch_size=opts.batch_size)
+def main(args):
+    if args.model_type == 'lstm':
+        model = LSTMRetrieval(args.input_size, args.hidden_size, batch_size=args.batch_size)
     else: # otherwise model is a 'cnn'
-        pass
+        raise RuntimeError('Unknown --model_type')
 
     loss_function = nn.CosineEmbeddingLoss(margin=0, size_average=False)
     
-    optimizer = torch.optim.SGD(model.parameters(), lr=opts.lr)
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
     # training_data = Ubuntu.load_training_data()
     print "Initializing Ubuntu Dataset..."
     train_dataset = UbuntuDataset()
@@ -95,10 +98,10 @@ def main(opts):
         num_workers=8,
         collate_fn=batchify
     )
-    for epoch in xrange(opts.epochs):
-        train(train_loader, model, criterion, optimizer, epoch)
-        if epoch % opts.val_epoch == 0:
-            validation(val_loader, model, criterion)
+    for epoch in xrange(args.epochs):
+        train(train_dataloader, model, loss_function, optimizer, epoch)
+        if epoch % args.val_epoch == 0:
+            validation(val_dataloader, model, loss_function)
 
 
 
@@ -119,5 +122,5 @@ if __name__=="__main__":
     # miscellaneous
     parser.add_argument('--val_epoch', default=1, type=int)
 
-    opts = parser.parse_args()
-    main(opts)
+    args = parser.parse_args()
+    main(args)

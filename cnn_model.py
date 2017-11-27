@@ -10,7 +10,7 @@ class CNN(nn.Module):
         self.window_size = 4
         self.cnn = nn.Sequential(
             nn.Conv1d(embedding_dim, hidden_dim, kernel_size=self.window_size),
-            # nn.BatchNorm1d(hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
             nn.Tanh()
         )
 

@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 from dataloader import UbuntuDataset, batchify
 from torch.autograd import Variable
 from lstm_model import LSTMRetrieval
+from cnn_model import CNN
 
 def train(train_loader, model, criterion, optimizer, epoch):
     print "Training..."
@@ -73,8 +74,12 @@ def validation(val_loader, model, criterion):
 
 def main(args):
     if args.model_type == 'lstm':
+        print "----LSTM----"
         model = LSTMRetrieval(args.input_size, args.hidden_size, batch_size=args.batch_size)
-    else: # otherwise model is a 'cnn'
+    elif args.model_type == 'cnn':
+        print "----CNN----"
+        model = CNN(args.input_size, args.hidden_size, batch_size=args.batch_size)
+    else:
         raise RuntimeError('Unknown --model_type')
 
     loss_function = nn.CosineEmbeddingLoss(margin=0, size_average=False)

@@ -7,11 +7,15 @@ from torch.autograd import Variable
 from lstm_model import LSTMRetrieval
 from cnn_model import CNN
 
-def train(train_loader, model, criterion, optimizer, epoch):
-    print "Training..."
+def run_epoch(train_loader, model, criterion, optimizer, epoch, mode='train'):
+    if mode == 'train':
+        print "Training..."
+    elif mode == 'val':
+        print "Validation..."
+
     print "Epoch {}".format(epoch)
     count = 0
-    avg_loss = 0
+    total_loss = 0
 
     for i_batch, (padded_things, ys) in enumerate(train_loader):
         print("Batch #{}".format(i_batch)) 
@@ -34,44 +38,16 @@ def train(train_loader, model, criterion, optimizer, epoch):
         other_embed = (other_title + other_body) / 2
 
         batch_avg_loss = criterion(query_embed, other_embed, ys)
-        print "total (sum) loss for batch {} was {}".format(i_batch, batch_avg_loss.data)
-        avg_loss += batch_avg_loss
+        print "total (sum) loss for batch {} was {}".format(i_batch, batch_avg_loss.data[0])
+        total_loss += batch_avg_loss.data[0]
         count += 1
 
-        batch_avg_loss.backward()
-        optimizer.step()
+        if mode == 'train':
+            batch_avg_loss.backward()
+            optimizer.step()
 
     avg_loss /= count
-    print "average loss for epoch %i was %f"%(epoch,avg_loss)
-
-def validation(val_loader, model, criterion):
-    print "Validation..."
-    count = 0
-    avg_loss = 0
-
-    for i_batch, (padded_things, ys) in enumerate(val_loader):
-        print("Batch #{}".format(i_batch)) 
-        (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = padded_things
-
-        
-        # Also, we need to clear out the hidden state of the LSTM,
-        # detaching it from its history on the last instance.
-        query_title = model.get_embed(qt_seq, qt_perm)
-        query_body = model.get_embed(qb_seq, qb_perm)
-        other_title = model.get_embed(ot_seq, ot_perm)
-        other_body = model.get_embed(ob_seq, ob_perm)
-
-        query_embed = (query_title + query_body) / 2
-        other_embed = (other_title + other_body) / 2
-
-        batch_avg_loss = criterion(query_embed, other_embed, ys)
-        print "total (sum) loss for batch {} was {}".format(i_batch, batch_avg_loss.data)
-        avg_loss += batch_avg_loss
-        count += 1
-
-    avg_loss /= count
-    print "average loss for validation was %f"%(avg_loss)
-
+    print "average {} loss for epoch {} was {}".format(mode, epoch, avg_loss)
 
 def main(args):
     if args.model_type == 'lstm':
@@ -107,10 +83,9 @@ def main(args):
         collate_fn=collate_fn
     )
     for epoch in xrange(args.epochs):
-        train(train_dataloader, model, loss_function, optimizer, epoch)
+        run_epoch(train_dataloader, model, loss_function, optimizer, epoch, mode='train')
         if epoch % args.val_epoch == 0:
-            validation(val_dataloader, model, loss_function)
-
+            run_epoch(val_dataloader, model, loss_function, optimizer, epoch, mode='val')
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()

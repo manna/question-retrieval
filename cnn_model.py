@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
-from torch.autograd import Variable
 
 class CNN(nn.Module):
     def __init__(self, embedding_dim, hidden_dim, batch_size=None):

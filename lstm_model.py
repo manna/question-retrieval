@@ -1,9 +1,6 @@
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
 from torch.autograd import Variable
-
-from dataloader import UbuntuDataset, make_collate_fn
 
 # class LSTM(nn.Module):
 #     def __init__(self, input_size, hidden_size, num_layers=1, avg_pool=True):
@@ -85,6 +82,9 @@ class LSTMRetrieval(nn.Module):
         return self(packed_seq, perm_idx)
 
 if __name__=='__main__':
+    from torch.utils.data import DataLoader
+    from dataloader import UbuntuDataset, make_collate_fn
+
     batch_size=100
     loss_function = nn.CosineEmbeddingLoss(margin=0, size_average=False)
     model = LSTMRetrieval(200, 150, batch_size=batch_size)

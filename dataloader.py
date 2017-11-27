@@ -1,6 +1,8 @@
 import gzip
 import numpy as np
 import torch
+from torch.autograd import Variable
+from torch.nn.utils.rnn import pack_padded_sequence
 import cPickle as pickle
 import collections
 
@@ -102,7 +104,7 @@ class Ubuntu():
 from torch.utils.data import Dataset, DataLoader
 
 class UbuntuDataset(Dataset):
-    def __init__(self):
+    def __init__(self, partition='train'):
         """
         Loads the Ubuntu training dataset.
 
@@ -113,6 +115,8 @@ class UbuntuDataset(Dataset):
             - random_questions
 
         similar_questions is a sublist of random_questions 
+
+        partition: valid options are 'train' or 'val'.
         """
         raw_data = Ubuntu.load_training_data()
 
@@ -122,8 +126,15 @@ class UbuntuDataset(Dataset):
         self.other_bodies = []
         self.Y = [] # [1, 1, -1, -1, -1, 1, -1, -1 ....]
         self.len = 0 # = len(self.query_vecs) = len(self.other_vecs) = len(self.Y)
+        self.partition = partition
+        if self.partition == "train":
+            start_index = 0
+            end_index = len(raw_data)-20000
+        elif self.partition == 'val':
+            start_index = len(raw_data)-20000
+            end_index = len(raw_data)
 
-        for example in raw_data:
+        for example in raw_data[start_index:end_index]:
             query_title = example['query_question']['title']
             query_body = example['query_question']['body']
 
@@ -146,47 +157,46 @@ class UbuntuDataset(Dataset):
         return (self.query_titles[idx], self.query_bodies[idx],
                 self.other_titles[idx], self.other_bodies[idx], self.Y[idx])
 
-print "Initializing Ubuntu Dataset..."
-ubuntu_dataset = UbuntuDataset()
+def pad(vectorized_seqs, embedding_size=200):
+    vectorized_seqs = list(vectorized_seqs)
+    seq_lengths = torch.LongTensor([len(seq) for seq in vectorized_seqs])
+    seq_tensor = Variable(torch.zeros(
+        (len(vectorized_seqs), seq_lengths.max(), embedding_size)))#.long()
 
-def pad(vectorized_seqs):
-    # get the length of each seq in your batch
-    seq_lengths = torch.LongTensor(map(len, vectorized_seqs)) # was torch.cuda.LongTensor
-
-    # dump padding everywhere, and place seqs on the left.
-    # NOTE: you only need a tensor as big as your longest sequence
-    seq_tensor = torch.zeros((len(vectorized_seqs), seq_lengths.max(), 200))
     for idx, (seq, seqlen) in enumerate(zip(vectorized_seqs, seq_lengths)):
-        seq_tensor[idx, :seqlen] = torch.Tensor(seq)
+        seq_tensor[idx, :seqlen] = torch.FloatTensor(seq)
 
-    return seq_tensor
+    return (seq_tensor, seq_lengths)
 
-    # If we wanted to return a PackedSequence object we could:
+def pack( (seq_tensor, seq_lengths) ):
+    # SORT YOUR TENSORS BY LENGTH!
+    seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
+    seq_tensor = seq_tensor[perm_idx]
 
-    # # SORT YOUR TENSORS BY LENGTH!
-    # seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
-    # seq_tensor = seq_tensor[perm_idx]
+    # utils.rnn lets you give (B,L,D) tensors where B is the batch size, L is the maxlength, if you use batch_first=True
+    # Otherwise, give (L,B,D) tensors
+    seq_tensor = seq_tensor.transpose(0, 1)  # (B,L,D) -> (L,B,D)
+    # print "seq_tensor ater transposing", seq_tensor.size() #, seq_tensor.data
 
-    # # pack them up nicely
-    # packed_input = torch.nn.utils.rnn.pack_padded_sequence(seq_tensor, seq_lengths.cpu().numpy())
-    # return packed_input
+    # pack them up nicely
+    packed_input = pack_padded_sequence(seq_tensor, seq_lengths.cpu().numpy())
 
-    # # throw them through your LSTM (remember to give batch_first=True here if you packed with it)
-    # packed_output, (ht, ct) = lstm(packed_input)
-
-    # # unpack your output if required
-    # output, _ = torch.nn.utils.rnn.pad_packed_sequence(packed_output)
-    # print output
-
-def pad_all(data): 
-    q_titles, q_bodies, o_titles, o_bodies, ys = zip(*data)
-    q_titles, q_bodies, o_titles, o_bodies = map(pad, (q_titles, q_bodies, o_titles, o_bodies))
-    return zip(q_titles, q_bodies, o_titles, o_bodies, ys)
+    return (packed_input, perm_idx)
 
 from torch.utils.data.dataloader import default_collate
-def batchify(batch):
-    padded_batch = pad_all(batch)
-    return default_collate(padded_batch)
+def make_collate_fn(pack_it=False):
+    def batchify(data):
+        q_titles, q_bodies, o_titles, o_bodies, ys = zip(*data)
+        padded_things = map(pad, (q_titles, q_bodies, o_titles, o_bodies))
+        if not pack_it:    
+            return padded_things, Variable(torch.LongTensor(ys))
+        
+        # (qt_seq, qt_lens), (qb_seq, qb_lens), (ot_seq, ot_lens), (ob_seq, ob_lens) = padded_things
+        packed_things = map(pack, padded_things)
+        # (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = packed_things
+        return packed_things, Variable(torch.LongTensor(ys))
+
+    return batchify
 
 if __name__=='__main__':
     #Demo usage
@@ -199,23 +209,27 @@ if __name__=='__main__':
 
     # Accessing ubuntu_dataset using a DataLoader
     print "Loading Ubuntu Dataset..."
+    ubuntu_dataset = UbuntuDataset()
     dataloader = DataLoader(
         ubuntu_dataset, 
-        batch_size=100, # 100*n -> n questions.
+        batch_size=3, # 100*n -> n questions.
         shuffle=False,
-        num_workers=8,
-        collate_fn=batchify
+        num_workers=0,
+        collate_fn=make_collate_fn(pack_it=True)
     )
 
-    for i_batch, sample_batched in enumerate(dataloader):
+    for i_batch, (packed_things, ys) in enumerate(dataloader):
         print("batch #{}".format(i_batch)) 
-        query_titles, query_bodies, other_titles, other_bodies, y = sample_batched
-        print("query:")
-        print(map(len, query_titles))
+        (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = packed_things
+
+        print("query titles:")
+        print(qt_seq)
+        print("qt perm:")
+        print(qt_perm)
         print("other:")
-        print(map(len, other_titles))
+        print(ot_seq)
         print("y:")
-        print(y)
+        print(ys)
 
         if i_batch == 50:
             break

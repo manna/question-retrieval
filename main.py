@@ -117,7 +117,7 @@ if __name__=="__main__":
 
     # model parameters
     parser.add_argument('--model_type', default='lstm', type=str) # valid options are 'lstm' or 'cnn'
-    parser.add_argument('--hidden_size', default=200, type=int)
+    parser.add_argument('--hidden_size', default=150, type=int)
     parser.add_argument('--input_size', default=200, type=int)
 
     # training parameters

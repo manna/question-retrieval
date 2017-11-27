@@ -18,10 +18,11 @@ class CNN(nn.Module):
         )
 
     def forward(self, seq_tensor, seq_lengths):
-        # seq_tensor shape is (batch_size, max_seq_length, embedding_size=200)
+        # seq_tensor.size() is (batch_size, seq_length, input_size=200)
+        # We need it to be (batch_size, input_size=200, seq_length)
+        seq_tensor = seq_tensor.transpose(1,2)
         out = self.cnn(seq_tensor)
         out = out.view(out.size(0), -1)
-        
         return out
 
     get_embed = forward

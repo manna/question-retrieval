@@ -2,7 +2,7 @@ import argparse
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
-from dataloader import UbuntuDataset, batchify
+from dataloader import UbuntuDataset, make_collate_fn
 from torch.autograd import Variable
 from lstm_model import LSTMRetrieval
 from cnn_model import CNN
@@ -15,7 +15,9 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
     for i_batch, (padded_things, ys) in enumerate(train_loader):
         print("Batch #{}".format(i_batch)) 
-        (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = padded_things
+
+        qt, qb, ot, ob = padded_things # padded_things might also be packed.
+        # qt is (PackedSequence, perm_idx), or (seq_tensor, set_lengths)
 
         # Step 1. Remember that Pytorch accumulates gradients. 
         # We need to clear them out before each instance
@@ -23,10 +25,10 @@ def train(train_loader, model, criterion, optimizer, epoch):
         
         # Also, we need to clear out the hidden state of the LSTM,
         # detaching it from its history on the last instance.
-        query_title = model.get_embed(qt_seq, qt_perm)
-        query_body = model.get_embed(qb_seq, qb_perm)
-        other_title = model.get_embed(ot_seq, ot_perm)
-        other_body = model.get_embed(ob_seq, ob_perm)
+        query_title = model.get_embed(*qt)
+        query_body = model.get_embed(*qb)
+        other_title = model.get_embed(*ot)
+        other_body = model.get_embed(*ob)
 
         query_embed = (query_title + query_body) / 2
         other_embed = (other_title + other_body) / 2
@@ -71,13 +73,14 @@ def validation(val_loader, model, criterion):
     print "average loss for validation was %f"%(avg_loss)
 
 
-
 def main(args):
     if args.model_type == 'lstm':
         print "----LSTM----"
         model = LSTMRetrieval(args.input_size, args.hidden_size, batch_size=args.batch_size)
+        collate_fn = make_collate_fn(pack_it=True)
     elif args.model_type == 'cnn':
         print "----CNN----"
+        collate_fn = make_collate_fn(pack_it=False)
         model = CNN(args.input_size, args.hidden_size, batch_size=args.batch_size)
     else:
         raise RuntimeError('Unknown --model_type')
@@ -93,7 +96,7 @@ def main(args):
         batch_size=args.batch_size, # 100*n -> n questions.
         shuffle=False,
         num_workers=8,
-        collate_fn=batchify
+        collate_fn=collate_fn
     )
     val_dataset = UbuntuDataset(partition='val')
     val_dataloader = DataLoader(
@@ -101,14 +104,12 @@ def main(args):
         batch_size=args.batch_size, # 100*n -> n questions.
         shuffle=False,
         num_workers=8,
-        collate_fn=batchify
+        collate_fn=collate_fn
     )
     for epoch in xrange(args.epochs):
         train(train_dataloader, model, loss_function, optimizer, epoch)
         if epoch % args.val_epoch == 0:
             validation(val_dataloader, model, loss_function)
-
-
 
 
 if __name__=="__main__":

@@ -17,10 +17,9 @@ class CNN(nn.Module):
             self.pool
         )
 
-    def forward(self, packed_seq, perm_idx):
-        # TODO: cnn can't take PackedSequence
-
-        out = self.cnn(seq)
+    def forward(self, seq_tensor, seq_lengths):
+        # seq_tensor shape is (batch_size, max_seq_length, embedding_size=200)
+        out = self.cnn(seq_tensor)
         out = out.view(out.size(0), -1)
         
         return out

@@ -157,11 +157,7 @@ class UbuntuDataset(Dataset):
         return (self.query_titles[idx], self.query_bodies[idx],
                 self.other_titles[idx], self.other_bodies[idx], self.Y[idx])
 
-def pack(vectorized_seqs, embedding_size=200):
-    if not vectorized_seqs or not isinstance(vectorized_seqs[0], collections.Iterable):
-        return vectorized_seqs
-
-    # pad:
+def pad(vectorized_seqs, embedding_size=200):
     vectorized_seqs = list(vectorized_seqs)
     seq_lengths = torch.LongTensor([len(seq) for seq in vectorized_seqs])
     seq_tensor = Variable(torch.zeros(
@@ -170,6 +166,9 @@ def pack(vectorized_seqs, embedding_size=200):
     for idx, (seq, seqlen) in enumerate(zip(vectorized_seqs, seq_lengths)):
         seq_tensor[idx, :seqlen] = torch.FloatTensor(seq)
 
+    return (seq_tensor, seq_lengths)
+
+def pack( (seq_tensor, seq_lengths) ):
     # SORT YOUR TENSORS BY LENGTH!
     seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
     seq_tensor = seq_tensor[perm_idx]
@@ -181,32 +180,23 @@ def pack(vectorized_seqs, embedding_size=200):
 
     # pack them up nicely
     packed_input = pack_padded_sequence(seq_tensor, seq_lengths.cpu().numpy())
-    
-    return packed_input, perm_idx
 
-    # # throw them through your LSTM (remember to give batch_first=True here if
-    # # you packed with it)
-    # packed_output, (ht, ct) = lstm(packed_input)
-
-    # # unpack your output if required
-    # output, _ = pad_packed_sequence(packed_output)
-    # print("Lstm output", output.size(), output.data)
-
-    # # Or if you just want the final hidden state?
-    # print("Last output", ht[-1].size(), ht[-1].data)
+    return (packed_input, perm_idx)
 
 from torch.utils.data.dataloader import default_collate
-def batchify(data):
-    q_titles, q_bodies, o_titles, o_bodies, ys = zip(*data)
-    padded_things = map(pack, (q_titles, q_bodies, o_titles, o_bodies))
-    
-    (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = padded_things
-    
-    # len(ys) = batch_size
-    # each *_seq represents batch_size sequences
-    # each *_perm contains the numbers 0..batch_size 
-    
-    return padded_things, Variable(torch.LongTensor(ys))
+def make_collate_fn(pack_it=False):
+    def batchify(data):
+        q_titles, q_bodies, o_titles, o_bodies, ys = zip(*data)
+        padded_things = map(pad, (q_titles, q_bodies, o_titles, o_bodies))
+        if not pack_it:    
+            return padded_things, Variable(torch.LongTensor(ys))
+        
+        # (qt_seq, qt_lens), (qb_seq, qb_lens), (ot_seq, ot_lens), (ob_seq, ob_lens) = padded_things
+        packed_things = map(pack, padded_things)
+        # (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = packed_things
+        return packed_things, Variable(torch.LongTensor(ys))
+
+    return batchify
 
 if __name__=='__main__':
     #Demo usage
@@ -219,17 +209,18 @@ if __name__=='__main__':
 
     # Accessing ubuntu_dataset using a DataLoader
     print "Loading Ubuntu Dataset..."
+    ubuntu_dataset = UbuntuDataset()
     dataloader = DataLoader(
         ubuntu_dataset, 
         batch_size=3, # 100*n -> n questions.
         shuffle=False,
         num_workers=0,
-        collate_fn=batchify
+        collate_fn=make_collate_fn(pack_it=True)
     )
 
-    for i_batch, (padded_things, ys) in enumerate(dataloader):
+    for i_batch, (packed_things, ys) in enumerate(dataloader):
         print("batch #{}".format(i_batch)) 
-        (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = padded_things
+        (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = packed_things
 
         print("query titles:")
         print(qt_seq)

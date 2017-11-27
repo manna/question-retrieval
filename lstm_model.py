@@ -3,7 +3,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 
-from dataloader import UbuntuDataset, batchify
+from dataloader import UbuntuDataset, make_collate_fn
 
 # class LSTM(nn.Module):
 #     def __init__(self, input_size, hidden_size, num_layers=1, avg_pool=True):
@@ -97,7 +97,7 @@ if __name__=='__main__':
         batch_size=batch_size, # 100*n -> n questions.
         shuffle=False,
         num_workers=8,
-        collate_fn=batchify
+        collate_fn=make_collate_fn(pack_it=True)
     )
 
     print "Training..."
@@ -106,9 +106,9 @@ if __name__=='__main__':
         count = 0
         avg_loss = 0
 
-        for i_batch, (padded_things, ys) in enumerate(dataloader):
+        for i_batch, (packed_things, ys) in enumerate(dataloader):
             print("Batch #{}".format(i_batch)) 
-            (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = padded_things
+            (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = packed_things
 
             # Step 1. Remember that Pytorch accumulates gradients. 
             # We need to clear them out before each instance

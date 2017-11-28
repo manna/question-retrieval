@@ -127,7 +127,7 @@ class UbuntuDataset(Dataset):
         partition: valid options are 'train' or 'val'.
         """
         raw_data = Ubuntu.load_training_data()
-
+        self.query_indices = []
         self.query_titles = []
         self.query_bodies = []
         self.other_titles = []
@@ -142,7 +142,7 @@ class UbuntuDataset(Dataset):
             start_index = len(raw_data)-20000
             end_index = len(raw_data)
 
-        for example in raw_data[start_index:end_index]:
+        for query_idx, example in enumerate(raw_data[start_index:end_index]):
             query_title = example['query_question']['title']
             query_body = example['query_question']['body']
 
@@ -151,6 +151,7 @@ class UbuntuDataset(Dataset):
             for i, other_q in enumerate(example['random_questions']):
                 other_title = other_q['title']
                 other_body = other_q['body']
+                self.query_indices.append(query_idx)
                 self.query_titles.append(query_title)
                 self.query_bodies.append(query_body)
                 self.other_titles.append(other_title)
@@ -162,7 +163,7 @@ class UbuntuDataset(Dataset):
         return self.len
 
     def __getitem__(self, idx):
-        return (self.query_titles[idx], self.query_bodies[idx],
+        return (self.query_indices[idx], self.query_titles[idx], self.query_bodies[idx],
                 self.other_titles[idx], self.other_bodies[idx], self.Y[idx])
 
 def pad(vectorized_seqs, embedding_size=200):
@@ -194,17 +195,18 @@ def pack( (seq_tensor, seq_lengths) ):
 from torch.utils.data.dataloader import default_collate
 def make_collate_fn(pack_it=False):
     def batchify(data):
-        q_titles, q_bodies, o_titles, o_bodies, ys = zip(*data)
+        q_indices, q_titles, q_bodies, o_titles, o_bodies, ys = zip(*data)
+        tensor_q_indices = torch.LongTensor(q_indices)
         var_ys = create_variable(torch.LongTensor(ys))
 
         padded_things = map(pad, (q_titles, q_bodies, o_titles, o_bodies))
         if not pack_it:    
-            return padded_things, var_ys
+            return tensor_q_indices, padded_things, var_ys
         
         # (qt_seq, qt_lens), (qb_seq, qb_lens), (ot_seq, ot_lens), (ob_seq, ob_lens) = padded_things
         packed_things = map(pack, padded_things)
         # (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = packed_things
-        return packed_things, var_ys
+        return tensor_q_indices, packed_things, var_ys
 
     return batchify
 

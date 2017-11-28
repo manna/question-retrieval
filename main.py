@@ -5,8 +5,9 @@ from torch.utils.data import DataLoader
 from dataloader import UbuntuDataset, make_collate_fn
 from lstm_model import LSTMRetrieval
 from cnn_model import CNN
+from IPython import embed
 
-def run_epoch(train_loader, model, criterion, optimizer, epoch, mode='train'):
+def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='train'):
     if mode == 'train':
         print "Training..."
     elif mode == 'val':
@@ -15,8 +16,11 @@ def run_epoch(train_loader, model, criterion, optimizer, epoch, mode='train'):
     print "Epoch {}".format(epoch)
     count = 0
     total_loss = 0
-
-    for i_batch, (padded_things, ys) in enumerate(train_loader):
+    current_q_idx = 0 # represents the query index we are currently iterating over
+    current_q_best_score = -float('inf') # represents the score of the other question most similar to current query
+    current_q_best_score_correct = False # represents whether the best scoring other question is annotated as similar to the query
+    top1_precision = 0.
+    for i_batch, (q_indices, padded_things, ys) in enumerate(train_loader):
         print("Batch #{}".format(i_batch)) 
 
         qt, qb, ot, ob = padded_things # padded_things might also be packed.
@@ -37,7 +41,27 @@ def run_epoch(train_loader, model, criterion, optimizer, epoch, mode='train'):
         other_embed = (other_title + other_body) / 2
 
         batch_avg_loss = criterion(query_embed, other_embed, ys)
+        for i_element in range(args.batch_size): 
+            # for computing accuracy metrics
+            if q_indices[i_element] != current_q_idx:
+                top1_precision = (current_q_idx*top1_precision + current_q_best_score_correct)/float(current_q_idx + 1)
+                # the numerator for top1_precision is the number of indices for which the best score 
+                # print current_q_best_score_correct
+                # print current_q_idx
+                current_q_idx = q_indices[i_element]
+                current_q_idx_best_score = -float('inf')
+                current_q_idx_best_scoring_label = None
+
+            element_score = criterion(query_embed[i_element:i_element+1], other_embed[i_element: i_element+1], torch.abs(ys[i_element: i_element+1]))
+            # print "element computation"
+            # print torch.abs(ys[i_element: i_element+1])
+            # print element_score
+            if element_score.data[0] > current_q_best_score:
+                current_q_best_score = element_score.data[0]
+                current_q_best_score_correct = (ys.data[i_element] == 1)
+
         print "total (sum) loss for batch {} was {}".format(i_batch, batch_avg_loss.data[0])
+        print "total top1 precision seen so far until batch {} was {}".format(i_batch, top1_precision)
         total_loss += batch_avg_loss.data[0]
         count += 1
 
@@ -73,7 +97,7 @@ def main(args):
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=args.batch_size, # 100*n -> n questions.
-        shuffle=False,
+        shuffle=False, # if shuffle=True, accuracy metrics will get screwed up
         num_workers=8,
         collate_fn=collate_fn
     )
@@ -81,14 +105,14 @@ def main(args):
     val_dataloader = DataLoader(
         val_dataset,
         batch_size=args.batch_size, # 100*n -> n questions.
-        shuffle=False,
+        shuffle=False, # if shuffle=True, accuracy metrics will get screwed up
         num_workers=8,
         collate_fn=collate_fn
     )
     for epoch in xrange(args.epochs):
-        run_epoch(train_dataloader, model, loss_function, optimizer, epoch, mode='train')
+        run_epoch(args, train_dataloader, model, loss_function, optimizer, epoch, mode='train')
         if epoch % args.val_epoch == 0:
-            run_epoch(val_dataloader, model, loss_function, optimizer, epoch, mode='val')
+            run_epoch(args, val_dataloader, model, loss_function, optimizer, epoch, mode='val')
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()

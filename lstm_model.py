@@ -56,7 +56,7 @@ class LSTMRetrieval(nn.Module):
         self.batch_size = batch_size
         # The LSTM takes word embeddings as inputs, and outputs hidden states
         # with dimensionality hidden_dim.
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim)
+        self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=False)
         self.hidden = self.init_hidden()
         
     def init_hidden(self):

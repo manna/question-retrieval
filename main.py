@@ -3,7 +3,6 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 from dataloader import UbuntuDataset, make_collate_fn
-from torch.autograd import Variable
 from lstm_model import LSTMRetrieval
 from cnn_model import CNN
 
@@ -60,6 +59,10 @@ def main(args):
         model = CNN(args.input_size, args.hidden_size, batch_size=args.batch_size)
     else:
         raise RuntimeError('Unknown --model_type')
+    
+    if torch.cuda.is_available():
+        print "Using CUDA"
+        model = model.cuda()
 
     loss_function = nn.CosineEmbeddingLoss(margin=0, size_average=False)
     

@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from torch.autograd import Variable
+from dataloader import create_variable
 
 # class LSTM(nn.Module):
 #     def __init__(self, input_size, hidden_size, num_layers=1, avg_pool=True):
@@ -63,8 +63,8 @@ class LSTMRetrieval(nn.Module):
         # Before we've done anything, we dont have any hidden state.
         # Refer to the Pytorch documentation to see exactly why they have this dimensionality.
         # The axes semantics are (num_layers, minibatch_size, hidden_dim)
-        h0 = Variable(torch.zeros(1, self.batch_size, self.hidden_dim))
-        c0 = Variable(torch.zeros(1, self.batch_size, self.hidden_dim))
+        h0 = create_variable(torch.zeros(1, self.batch_size, self.hidden_dim))
+        c0 = create_variable(torch.zeros(1, self.batch_size, self.hidden_dim))
         return (h0, c0)
         
     def forward(self, packed_input, perm_idx):

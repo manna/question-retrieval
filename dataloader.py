@@ -1,10 +1,18 @@
 import gzip
 import numpy as np
 import torch
-from torch.autograd import Variable
 from torch.nn.utils.rnn import pack_padded_sequence
 import cPickle as pickle
 import collections
+
+from torch.autograd import Variable
+def create_variable(tensor):
+    """
+    TODO: Move to utils.py
+    """
+    if torch.cuda.is_available():
+        return Variable(tensor.cuda())
+    return Variable(tensor)
 
 class Vectorizer():
     _VECTORS = None
@@ -160,7 +168,7 @@ class UbuntuDataset(Dataset):
 def pad(vectorized_seqs, embedding_size=200):
     vectorized_seqs = list(vectorized_seqs)
     seq_lengths = torch.LongTensor([len(seq) for seq in vectorized_seqs])
-    seq_tensor = Variable(torch.zeros(
+    seq_tensor = create_variable(torch.zeros(
         (len(vectorized_seqs), seq_lengths.max(), embedding_size)))#.long()
 
     for idx, (seq, seqlen) in enumerate(zip(vectorized_seqs, seq_lengths)):
@@ -187,14 +195,16 @@ from torch.utils.data.dataloader import default_collate
 def make_collate_fn(pack_it=False):
     def batchify(data):
         q_titles, q_bodies, o_titles, o_bodies, ys = zip(*data)
+        var_ys = create_variable(torch.LongTensor(ys))
+
         padded_things = map(pad, (q_titles, q_bodies, o_titles, o_bodies))
         if not pack_it:    
-            return padded_things, Variable(torch.LongTensor(ys))
+            return padded_things, var_ys
         
         # (qt_seq, qt_lens), (qb_seq, qb_lens), (ot_seq, ot_lens), (ob_seq, ob_lens) = padded_things
         packed_things = map(pack, padded_things)
         # (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = packed_things
-        return packed_things, Variable(torch.LongTensor(ys))
+        return packed_things, var_ys
 
     return batchify
 

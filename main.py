@@ -46,6 +46,7 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
             if q_indices[i_element] != current_q_idx:
                 top1_precision = (current_q_idx*top1_precision + current_q_best_score_correct)/float(current_q_idx + 1)
                 # the numerator for top1_precision is the number of indices for which the best score 
+                # the denominator for top1_precision is the number of unique query indices seen overall.
                 # print current_q_best_score_correct
                 # print current_q_idx
                 current_q_idx = q_indices[i_element]

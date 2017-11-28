@@ -50,13 +50,13 @@ from torch.autograd import Variable
 
 class LSTMRetrieval(nn.Module):
     
-    def __init__(self, embedding_dim, hidden_dim, batch_size=1):
+    def __init__(self, embedding_dim, hidden_dim, num_layers=1, batch_size=1):
         super(LSTMRetrieval, self).__init__()
         self.hidden_dim = hidden_dim
         self.batch_size = batch_size
         # The LSTM takes word embeddings as inputs, and outputs hidden states
         # with dimensionality hidden_dim.
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim)
+        self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=False)
         self.hidden = self.init_hidden()
         
     def init_hidden(self):

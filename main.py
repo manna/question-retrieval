@@ -2,7 +2,7 @@ import argparse
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
-from dataloader import UbuntuDataset, make_collate_fn
+from dataloader import UbuntuDataset, make_collate_fn, create_variable
 from lstm_model import LSTMRetrieval
 from cnn_model import CNN
 
@@ -18,6 +18,7 @@ def run_epoch(train_loader, model, criterion, optimizer, epoch, mode='train'):
 
     for i_batch, (padded_things, ys) in enumerate(train_loader):
         print("Batch #{}".format(i_batch)) 
+        ys = create_variable(ys)
 
         qt, qb, ot, ob = padded_things # padded_things might also be packed.
         # qt is (PackedSequence, perm_idx), or (seq_tensor, set_lengths)
@@ -52,7 +53,7 @@ def main(args):
     if args.model_type == 'lstm':
         print "----LSTM----"
         model = LSTMRetrieval(args.input_size, args.hidden_size, batch_size=args.batch_size)
-        collate_fn = make_collate_fn(pack_it=True)
+        collate_fn = make_collate_fn(pack_it=False)
     elif args.model_type == 'cnn':
         print "----CNN----"
         collate_fn = make_collate_fn(pack_it=False)
@@ -63,7 +64,7 @@ def main(args):
     if torch.cuda.is_available():
         print "Using CUDA"
         model = model.cuda()
-
+        model.share_memory()
     loss_function = nn.CosineEmbeddingLoss(margin=0, size_average=False)
     
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)

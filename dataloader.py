@@ -168,8 +168,9 @@ class UbuntuDataset(Dataset):
 def pad(vectorized_seqs, embedding_size=200):
     vectorized_seqs = list(vectorized_seqs)
     seq_lengths = torch.LongTensor([len(seq) for seq in vectorized_seqs])
-    seq_tensor = create_variable(torch.zeros(
-        (len(vectorized_seqs), seq_lengths.max(), embedding_size)))#.long()
+    seq_tensor = torch.zeros(
+        (len(vectorized_seqs), seq_lengths.max(), embedding_size)
+    )
 
     for idx, (seq, seqlen) in enumerate(zip(vectorized_seqs, seq_lengths)):
         seq_tensor[idx, :seqlen] = torch.FloatTensor(seq)
@@ -195,16 +196,15 @@ from torch.utils.data.dataloader import default_collate
 def make_collate_fn(pack_it=False):
     def batchify(data):
         q_titles, q_bodies, o_titles, o_bodies, ys = zip(*data)
-        var_ys = create_variable(torch.LongTensor(ys))
 
         padded_things = map(pad, (q_titles, q_bodies, o_titles, o_bodies))
         if not pack_it:    
-            return padded_things, var_ys
+            return padded_things, torch.LongTensor(ys)
         
         # (qt_seq, qt_lens), (qb_seq, qb_lens), (ot_seq, ot_lens), (ob_seq, ob_lens) = padded_things
         packed_things = map(pack, padded_things)
         # (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = packed_things
-        return packed_things, var_ys
+        return packed_things, torch.LongTensor(ys)
 
     return batchify
 

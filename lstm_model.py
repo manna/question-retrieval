@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from dataloader import create_variable
+from dataloader import create_variable, pack
 
 # class LSTM(nn.Module):
 #     def __init__(self, input_size, hidden_size, num_layers=1, avg_pool=True):
@@ -67,7 +67,11 @@ class LSTMRetrieval(nn.Module):
         c0 = create_variable(torch.zeros(1, self.batch_size, self.hidden_dim))
         return (h0, c0)
         
-    def forward(self, packed_input, perm_idx):
+    def forward(self, seq_tensor, seq_lengths):
+        seq_tensor = create_variable(seq_tensor)
+        if torch.cuda.is_available():
+            seq_lengths = seq_lengths.cuda()
+        packed_input, perm_idx = pack((seq_tensor, seq_lengths))
         # throw them through your LSTM (remember to give batch_first=True here if you packed with it)
         packed_output, (ht, ct) = self.lstm(packed_input)
 
@@ -77,9 +81,9 @@ class LSTMRetrieval(nn.Module):
         _, orig_idx = perm_idx.sort(0, descending=False)
         return ht[-1][orig_idx] # Return last hidden layer, after unsorting the batch
 
-    def get_embed(self, packed_seq, perm_idx):
+    def get_embed(self, seq_tensor, seq_lengths):
         self.hidden = self.init_hidden()
-        return self(packed_seq, perm_idx)
+        return self(seq_tensor, seq_lengths)
 
 if __name__=='__main__':
     from torch.utils.data import DataLoader

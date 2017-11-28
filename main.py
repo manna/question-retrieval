@@ -2,7 +2,7 @@ import argparse
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
-from dataloader import UbuntuDataset, make_collate_fn, create_variable
+from dataloader import UbuntuDataset, batchify, create_variable
 from lstm_model import LSTMRetrieval
 from cnn_model import CNN
 from IPython import embed
@@ -42,6 +42,10 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
         other_embed = (other_title + other_body) / 2
 
         batch_avg_loss = criterion(query_embed, other_embed, ys)
+        total_loss += batch_avg_loss.data[0]
+        count += 1
+        print "total (sum) loss for batch {} was {}".format(i_batch, batch_avg_loss.data[0])
+        
         for i_element in range(args.batch_size): 
             # for computing accuracy metrics
             if q_indices[i_element] != current_q_idx:
@@ -62,10 +66,7 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
                 current_q_best_score = element_score.data[0]
                 current_q_best_score_correct = (ys.data[i_element] == 1)
 
-        print "total (sum) loss for batch {} was {}".format(i_batch, batch_avg_loss.data[0])
         print "total top1 precision seen so far until batch {} was {}".format(i_batch, top1_precision)
-        total_loss += batch_avg_loss.data[0]
-        count += 1
 
         if mode == 'train':
             batch_avg_loss.backward()
@@ -78,10 +79,8 @@ def main(args):
     if args.model_type == 'lstm':
         print "----LSTM----"
         model = LSTMRetrieval(args.input_size, args.hidden_size, batch_size=args.batch_size)
-        collate_fn = make_collate_fn(pack_it=False)
     elif args.model_type == 'cnn':
         print "----CNN----"
-        collate_fn = make_collate_fn(pack_it=False)
         model = CNN(args.input_size, args.hidden_size, batch_size=args.batch_size)
     else:
         raise RuntimeError('Unknown --model_type')
@@ -101,7 +100,7 @@ def main(args):
         batch_size=args.batch_size, # 100*n -> n questions.
         shuffle=False, # if shuffle=True, accuracy metrics will get screwed up
         num_workers=8,
-        collate_fn=collate_fn
+        collate_fn=batchify
     )
     val_dataset = UbuntuDataset(partition='val')
     val_dataloader = DataLoader(
@@ -109,7 +108,7 @@ def main(args):
         batch_size=args.batch_size, # 100*n -> n questions.
         shuffle=False, # if shuffle=True, accuracy metrics will get screwed up
         num_workers=8,
-        collate_fn=collate_fn
+        collate_fn=batchify
     )
     for epoch in xrange(args.epochs):
         run_epoch(args, train_dataloader, model, loss_function, optimizer, epoch, mode='train')

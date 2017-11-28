@@ -1,6 +1,22 @@
 import torch
 from torch import nn
-from dataloader import create_variable, pack
+from torch.nn.utils.rnn import pack_padded_sequence
+from dataloader import create_variable
+
+def pack( (seq_tensor, seq_lengths) ):
+    # SORT YOUR TENSORS BY LENGTH!
+    seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
+    seq_tensor = seq_tensor[perm_idx]
+
+    # utils.rnn lets you give (B,L,D) tensors where B is the batch size, L is the maxlength, if you use batch_first=True
+    # Otherwise, give (L,B,D) tensors
+    seq_tensor = seq_tensor.transpose(0, 1)  # (B,L,D) -> (L,B,D)
+    # print "seq_tensor ater transposing", seq_tensor.size() #, seq_tensor.data
+
+    # pack them up nicely
+    packed_input = pack_padded_sequence(seq_tensor, seq_lengths.cpu().numpy())
+
+    return (packed_input, perm_idx)
 
 # class LSTM(nn.Module):
 #     def __init__(self, input_size, hidden_size, num_layers=1, avg_pool=True):

@@ -1,7 +1,6 @@
 import gzip
 import numpy as np
 import torch
-from torch.nn.utils.rnn import pack_padded_sequence
 import cPickle as pickle
 import collections
 
@@ -178,31 +177,14 @@ def pad(vectorized_seqs, embedding_size=200):
 
     return (seq_tensor, seq_lengths)
 
-def pack( (seq_tensor, seq_lengths) ):
-    # SORT YOUR TENSORS BY LENGTH!
-    seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
-    seq_tensor = seq_tensor[perm_idx]
 
-    # utils.rnn lets you give (B,L,D) tensors where B is the batch size, L is the maxlength, if you use batch_first=True
-    # Otherwise, give (L,B,D) tensors
-    seq_tensor = seq_tensor.transpose(0, 1)  # (B,L,D) -> (L,B,D)
-    # print "seq_tensor ater transposing", seq_tensor.size() #, seq_tensor.data
+def batchify(data):
+    q_indices, q_titles, q_bodies, o_titles, o_bodies, ys = zip(*data)
 
-    # pack them up nicely
-    packed_input = pack_padded_sequence(seq_tensor, seq_lengths.cpu().numpy())
+    padded_things = map(pad, (q_titles, q_bodies, o_titles, o_bodies))
+    
+    return torch.LongTensor(q_indices), padded_things, torch.LongTensor(ys),  
 
-    return (packed_input, perm_idx)
-
-from torch.utils.data.dataloader import default_collate
-def make_collate_fn(pack_it=False):
-    def batchify(data):
-        q_indices, q_titles, q_bodies, o_titles, o_bodies, ys = zip(*data)
-
-        padded_things = map(pad, (q_titles, q_bodies, o_titles, o_bodies))
-        if not pack_it:   
-            return torch.LongTensor(q_indices), padded_things, torch.LongTensor(ys),  
-
-    return batchify
 
 if __name__=='__main__':
     #Demo usage
@@ -221,12 +203,12 @@ if __name__=='__main__':
         batch_size=3, # 100*n -> n questions.
         shuffle=False,
         num_workers=0,
-        collate_fn=make_collate_fn(pack_it=True)
+        collate_fn=batchify
     )
 
-    for i_batch, (packed_things, ys) in enumerate(dataloader):
+    for i_batch, (q_indices, padded_things, ys) in enumerate(dataloader):
         print("batch #{}".format(i_batch)) 
-        (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = packed_things
+        (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = padded_things
 
         print("query titles:")
         print(qt_seq)

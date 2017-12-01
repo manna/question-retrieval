@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import cPickle as pickle
 import collections
+import sys
 
 from torch.autograd import Variable
 def create_variable(tensor):
@@ -146,8 +147,13 @@ class UbuntuDataset(Dataset):
             query_body = example['query_question']['body']
 
             sim_count = len(example['similar_questions'])
-            # The first sim_count random questions are similar.
-            for i, other_q in enumerate(example['random_questions']):
+            for i in range(100):
+                if i < sim_count:
+                    self.Y.append( 1 )
+                    other_q = example['similar_questions'][i]
+                else:
+                    self.Y.append( -1 )
+                    other_q = example['random_questions'][i]
                 other_title = other_q['title']
                 other_body = other_q['body']
                 self.query_indices.append(query_idx)
@@ -155,8 +161,7 @@ class UbuntuDataset(Dataset):
                 self.query_bodies.append(query_body)
                 self.other_titles.append(other_title)
                 self.other_bodies.append(other_body)
-                self.Y.append( 1 if i < sim_count else -1 )
-                self.len += 1
+            self.len += 100
 
     def __len__(self):
         return self.len
@@ -205,6 +210,7 @@ if __name__=='__main__':
         num_workers=0,
         collate_fn=batchify
     )
+    sys.exit(0)
 
     for i_batch, (q_indices, padded_things, ys) in enumerate(dataloader):
         print("batch #{}".format(i_batch)) 

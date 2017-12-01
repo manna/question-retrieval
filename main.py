@@ -88,7 +88,7 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
             batch_avg_loss.backward()
             optimizer.step()
 
-    avg_loss /= count
+    avg_loss = total_loss / count
     print "average {} loss for epoch {} was {}".format(mode, epoch, avg_loss)
 
 def main(args):

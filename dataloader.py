@@ -178,7 +178,8 @@ def pad(vectorized_seqs, embedding_size=200):
     )
 
     for idx, (seq, seqlen) in enumerate(zip(vectorized_seqs, seq_lengths)):
-        seq_tensor[idx, :seqlen] = torch.FloatTensor(seq)
+        if seqlen > 0:
+            seq_tensor[idx, :seqlen] = torch.FloatTensor(seq)
 
     return (seq_tensor, seq_lengths)
 

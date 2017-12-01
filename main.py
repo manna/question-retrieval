@@ -1,11 +1,46 @@
 import argparse
 import torch
 from torch import nn
+from torch.nn.modules.loss import _Loss
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from dataloader import UbuntuDataset, batchify, create_variable
 from lstm_model import LSTMRetrieval
 from cnn_model import CNN
 from IPython import embed
+
+class MaxMarginCosineSimilarityLoss(_Loss):
+    def __init__(self, margin=0):
+        super(MaxMarginCosineSimilarityLoss, self).__init__()
+        self.margin = margin
+
+    def forward(self, queries, others, targets):
+        """ 
+        Assumes one query per batch: (all queries are the same)
+        
+        Weakly assumes only one positive example.
+        In that case, this loss function is exactly as described in arxiv 1512.05726
+        """
+        batch_size = targets.size()[0]
+        min_positive_score = None
+        max_score = None
+        for i in range(batch_size):
+            p = others[i]
+            q = queries[i]
+            score = F.cosine_similarity(q, p, dim=0)
+            if (targets[i].data < 0).all(): # if -1
+                score += 0.2 # delta
+            if (targets[i].data > 0).all(): # if 1
+                if min_positive_score is None:
+                    min_positive_score = score
+                else:
+                    min_positive_score = min_positive_score.min(score)
+            if max_score is None:
+                max_score = score
+            else:
+                max_score = max_score.max(score)
+        max_margin_loss = max_score - min_positive_score
+        return max_margin_loss
 
 def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='train'):
     def get_top_results(num_results, top_results, new_result):
@@ -105,7 +140,7 @@ def main(args):
         print "Using CUDA"
         model = model.cuda()
         model.share_memory()
-    loss_function = nn.CosineEmbeddingLoss(margin=0, size_average=False)
+    loss_function = MaxMarginCosineSimilarityLoss(margin=0.2)
     
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
     # training_data = Ubuntu.load_training_data()

@@ -14,7 +14,6 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
         top_results = a list of tuples, in which first element of tuple is the positive or negative label of the question, the second is the score of that question
         new_result = a new result that we want to compare to the top_results. if it is good enough, put it in top_results
         """
-        embed()
         top_results.append(new_result)
         top_results = sorted(top_results, key=lambda i: i[1])[::-1] # sort results from greatest to least score
         top_results = top_results[:num_results] # keep only the top performing num_results number of results

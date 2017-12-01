@@ -17,6 +17,7 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
         top_results.append(new_result)
         top_results = sorted(top_results, key=lambda i: i[1])[::-1] # sort results from greatest to least score
         top_results = top_results[:num_results] # keep only the top performing num_results number of results
+        return top_results
 
     if mode == 'train':
         print "Training..."
@@ -74,8 +75,8 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
                 current_q_top5 = []
 
             element_score = criterion(query_embed[i_element:i_element+1], other_embed[i_element: i_element+1], torch.abs(ys[i_element: i_element+1]))
-            get_top_results(1, current_q_top1, (ys.data[i_element], element_score.data[0]))
-            get_top_results(5, current_q_top5, (ys.data[i_element], element_score.data[0]))
+            current_q_top1 = get_top_results(1, current_q_top1, (ys.data[i_element], element_score.data[0]))
+            current_q_top5 = get_top_results(5, current_q_top5, (ys.data[i_element], element_score.data[0]))
             # if element_score.data[0] > current_q_best_score:
             #     current_q_best_score = element_score.data[0]
             #     current_q_best_score_correct = (ys.data[i_element] == 1)

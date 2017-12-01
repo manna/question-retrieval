@@ -8,6 +8,16 @@ from cnn_model import CNN
 from IPython import embed
 
 def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='train'):
+    def get_top_results(num_results, top_results, new_result):
+        """
+        num_results = the number of results we want to keep among the top_results
+        top_results = a list of tuples, in which first element of tuple is the positive or negative label of the question, the second is the score of that question
+        new_result = a new result that we want to compare to the top_results. if it is good enough, put it in top_results
+        """
+        top_results.append(new_result)
+        top_results = sorted(top_results, key=lambda i: i[1])[::-1] # sort results from greatest to least score
+        top_results = top_results[:num_results] # keep only the top performing num_results number of results
+
     if mode == 'train':
         print "Training..."
     elif mode == 'val':
@@ -17,9 +27,12 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
     count = 0
     total_loss = 0
     current_q_idx = 0 # represents the query index we are currently iterating over
-    current_q_best_score = -float('inf') # represents the score of the other question most similar to current query
-    current_q_best_score_correct = False # represents whether the best scoring other question is annotated as similar to the query
+    # current_q_best_score = -float('inf') # represents the score of the other question most similar to current query
+    # current_q_best_score_correct = False # represents whether the best scoring other question is annotated as similar to the query
+    current_q_top1 = []
+    current_q_top5 = []
     top1_precision = 0.
+    top5_precision = 0.
     for i_batch, (q_indices, padded_things, ys) in enumerate(train_loader):
         print("Batch #{}".format(i_batch)) 
         ys = create_variable(ys)
@@ -49,21 +62,26 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
         for i_element in range(args.batch_size): 
             # for computing accuracy metrics
             if q_indices[i_element] != current_q_idx:
-                top1_precision = (current_q_idx*top1_precision + current_q_best_score_correct)/float(current_q_idx + 1)
+                current_q_top1_good_count = len([result for result in current_q_top1 if result[0] == 1])
+                current_q_top5_good_count = len([result for result in current_q_top5 if result[0] == 1])
+                top1_precision = (current_q_idx*top1_precision + current_q_top1_good_count)/float(current_q_idx + 1)
+                top5_precision = (current_q_idx*top5_precision + current_q_top5_good_count)/float(5* (current_q_idx + 1))
+                # top1_precision = (current_q_idx*top1_precision + current_q_best_score_correct)/float(current_q_idx + 1)
                 # the numerator for top1_precision is the number of indices for which the best score 
                 # the denominator for top1_precision is the number of unique query indices seen overall.
                 current_q_idx = q_indices[i_element]
-                current_q_best_score = -float('inf')
-                current_q_best_scoring_label = None
+                current_q_top1 = []
+                current_q_top5 = []
 
             element_score = criterion(query_embed[i_element:i_element+1], other_embed[i_element: i_element+1], torch.abs(ys[i_element: i_element+1]))
-            if element_score.data[0] > current_q_best_score:
-                current_q_best_score = element_score.data[0]
-                current_q_best_score_correct = (ys.data[i_element] == 1)
-                # if current_q_best_score_correct:
-                #     print current_q_best_score
+            current_q_top1 = get_top_results(1, current_q_top1, (ys.data[i_element], element_score.data[0]))
+            current_q_top5 = get_top_results(5, current_1_top5, (ys.data[i_element], element_score.data[0]))
+            # if element_score.data[0] > current_q_best_score:
+            #     current_q_best_score = element_score.data[0]
+            #     current_q_best_score_correct = (ys.data[i_element] == 1)
 
         print "total top1 precision seen so far until batch %i was %f"%(i_batch, top1_precision)
+        print "total top5 precision seen so far until batch %i was %f"%(i_batch, top5_precision)
 
         if mode == 'train':
             batch_avg_loss.backward()

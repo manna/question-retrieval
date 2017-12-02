@@ -43,16 +43,8 @@ class MaxMarginCosineSimilarityLoss(_Loss):
         return max_margin_loss
 
 def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='train'):
-    def get_top_results(num_results, top_results, new_result):
-        """
-        num_results = the number of results we want to keep among the top_results
-        top_results = a list of tuples, in which first element of tuple is the positive or negative label of the question, the second is the score of that question
-        new_result = a new result that we want to compare to the top_results. if it is good enough, put it in top_results
-        """
-        top_results.append(new_result)
-        top_results = sorted(top_results, key=lambda i: i[1])[::-1] # sort results from greatest to least score
-        top_results = top_results[:num_results] # keep only the top performing num_results number of results
-        return top_results
+    def get_moving_average(avg, num_prev_samples, num_new_samples, new_value):
+        return float(avg*num_prev_samples + new_value)/(num_prev_samples + num_new_samples)
 
     if mode == 'train':
         print "Training..."
@@ -63,12 +55,11 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
     count = 0
     total_loss = 0
     current_q_idx = 0 # represents the query index we are currently iterating over
-    # current_q_best_score = -float('inf') # represents the score of the other question most similar to current query
-    # current_q_best_score_correct = False # represents whether the best scoring other question is annotated as similar to the query
-    current_q_top1 = []
-    current_q_top5 = []
+    current_q_results = [] # contains a list of tuples. first element of tuple is ground truth label (1 or -1) of question; 2nd is question score.
     top1_precision = 0.
     top5_precision = 0.
+    MAP = 0.
+    MRR = 0.
     for i_batch, (q_indices, padded_things, ys) in enumerate(train_loader):
         print("Batch #{}".format(i_batch)) 
         ys = create_variable(ys)
@@ -98,26 +89,35 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
         for i_element in range(args.batch_size): 
             # for computing accuracy metrics
             if q_indices[i_element] != current_q_idx:
-                current_q_top1_good_count = len([result for result in current_q_top1 if result[0] == 1])
-                current_q_top5_good_count = len([result for result in current_q_top5 if result[0] == 1])
-                top1_precision = (current_q_idx*top1_precision + current_q_top1_good_count)/float(current_q_idx + 1)
-                top5_precision = (current_q_idx*top5_precision + current_q_top5_good_count)/float(5* (current_q_idx + 1))
-                # top1_precision = (current_q_idx*top1_precision + current_q_best_score_correct)/float(current_q_idx + 1)
-                # the numerator for top1_precision is the number of indices for which the best score 
-                # the denominator for top1_precision is the number of unique query indices seen overall.
+                current_q_results = sorted(current_q_results, key=lambda result: result[1])[::-1]
+                current_q_top1_good_count = len([result for result in current_q_results[:1] if result[0] == 1])
+                current_q_top5_good_count = len([result for result in current_q_results[:5] if result[0] == 1])
+                current_q_question_labels, _ = zip(*current_q_results)
+
+                # compute stats for MRR and MAP for current question
+                first_positive_idx = current_q_question_labels.index(1)
+                current_q_MRR = 1./(first_positive_idx+1)
+                
+                positive_indices = [question_idx for question_idx in range(len(current_q_question_labels)) if current_q_question_labels[question_idx]==1]
+                current_q_MAP = np.mean([float(i+1)/(positive_indices[i]+1) for i in range(len(positive_indices))]) 
+
+                top1_precision = get_moving_average(top1_precision, current_q_idx, 1, current_q_top1_good_count)
+                top5_precision = get_moving_average(top5_precision, 5*current_q_idx, 5, current_q_top5_good_count)
+                MRR = get_moving_average(MRR, current_q_idx, 1, current_q_MRR)
+                MAP = get_moving_average(MAP, current_q_idx, 1, current_q_MAP)
+
                 current_q_idx = q_indices[i_element]
-                current_q_top1 = []
-                current_q_top5 = []
+                current_q_results = []
 
             element_score = criterion(query_embed[i_element:i_element+1], other_embed[i_element: i_element+1], torch.abs(ys[i_element: i_element+1]))
-            current_q_top1 = get_top_results(1, current_q_top1, (ys.data[i_element], element_score.data[0]))
-            current_q_top5 = get_top_results(5, current_q_top5, (ys.data[i_element], element_score.data[0]))
-            # if element_score.data[0] > current_q_best_score:
-            #     current_q_best_score = element_score.data[0]
-            #     current_q_best_score_correct = (ys.data[i_element] == 1)
+            current_q_results.append((ys.data[i_element], element_score.data[0]))
 
-        print "total top1 precision seen so far until batch %i was %f"%(i_batch, top1_precision)
-        print "total top5 precision seen so far until batch %i was %f"%(i_batch, top5_precision)
+        if i_batch % args.stats_display_interval == 0:
+            print "current q_idx: %i"%current_q_idx
+            print "average top1 precision seen so far until batch %i was %f"%(i_batch, top1_precision)
+            print "average top5 precision seen so far until batch %i was %f"%(i_batch, top5_precision)
+            print "average MAP seen so far until batch %i was %f"%(i_batch, MAP)
+            print "average MRR seen so far until batch %i was %f"%(i_batch, MRR)
 
         if mode == 'train':
             batch_avg_loss.backward()

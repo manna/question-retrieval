@@ -181,6 +181,7 @@ if __name__=="__main__":
 
     # miscellaneous
     parser.add_argument('--val_epoch', default=1, type=int)
+    parser.add_argument('--stats_display_interval', default=1, type=int)
 
     args = parser.parse_args()
     main(args)

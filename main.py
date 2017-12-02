@@ -8,6 +8,7 @@ from dataloader import UbuntuDataset, batchify, create_variable
 from lstm_model import LSTMRetrieval
 from cnn_model import CNN
 from IPython import embed
+import numpy as np
 
 class MaxMarginCosineSimilarityLoss(_Loss):
     def __init__(self, margin=0):

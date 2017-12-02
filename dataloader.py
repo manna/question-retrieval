@@ -20,12 +20,11 @@ class Vectorizer():
     END_OF_TITLE = [1.]*200
 
     @staticmethod
-    def load_pretrained_vectors():
+    def load_pretrained_vectors(path='askubuntu-master/vector/vectors_pruned.200.txt.gz'):
         if Vectorizer._VECTORS is not None:
             return Vectorizer._VECTORS
         
         Vectorizer._VECTORS = {}
-        path = 'askubuntu-master/vector/vectors_pruned.200.txt.gz'
         with gzip.open(path) as f:
             lines = f.readlines()
         for line in lines:
@@ -51,23 +50,22 @@ Vectorizer.load_pretrained_vectors()
 # print(len(Vectorizer.vectorize_word('ubuntu')))
 # print(len(Vectorizer.vectorize_sentence('ubuntu linux')))
 
-class Ubuntu():
-    _CORPUS = None
+class Ubuntu(): #TODO: Rename this.
+    _CORPUS = {}
 
     @staticmethod
-    def load_corpus():
+    def load_corpus(path='askubuntu-master/text_tokenized.txt.gz'):
         """
         1.1 Setup.
 
         Load Q = {q1, ..., qn}.
         Return python dictionary mapping id to Question.
         """
-        if Ubuntu._CORPUS is not None:
-            return Ubuntu._CORPUS
+        if path in Ubuntu._CORPUS:
+            return Ubuntu._CORPUS[path]
 
-        Ubuntu._CORPUS = {}
-
-        path = 'askubuntu-master/text_tokenized.txt.gz'
+        Ubuntu._CORPUS[path] = {}
+        
         with gzip.open(path) as f:
             lines = f.readlines()
 
@@ -77,14 +75,45 @@ class Ubuntu():
             title_words = question_title.split() # Todo is this the right tokenizer?
             body_words = question_body.split() 
 
-            Ubuntu._CORPUS[question_id] = {
+            Ubuntu._CORPUS[path][question_id] = {
                 'title': Vectorizer.vectorize_sentence(title_words),
                 'body': Vectorizer.vectorize_sentence(body_words)
             }
-        return Ubuntu._CORPUS
+        return Ubuntu._CORPUS[path]
 
     @staticmethod
-    def load_training_data():
+    def load_eval_data(
+        corpus_path='Android-master/corpus.tsv.gz',
+        path_stem='Android-master/{}.{}.txt',
+        dev_or_test='dev'
+        ):
+
+        CORPUS = Ubuntu.load_corpus(path=corpus_path)         
+
+        data = []
+        for partition, path in [
+            ('similar_questions', path_stem.format(dev_or_test, 'pos')), 
+            ('random_questions', path_stem.format(dev_or_test, 'neg'))
+            ]:
+            with open(path) as f:
+                lines = f.readlines()
+
+            for line in lines:
+                query_question_id, other_question_id = line.split()
+                obj = {
+                    'query_question': CORPUS[query_question_id],
+                    'similar_questions': [],
+                    'random_questions': []
+                    }
+                obj[partition].append(CORPUS[other_question_id])
+                data.append(obj)
+        return data
+
+    @staticmethod
+    def load_training_data(
+        corpus_path='askubuntu-master/text_tokenized.txt.gz',
+        path='askubuntu-master/train_random.txt'
+        ):
         """
         1.1 Setup
 
@@ -92,11 +121,10 @@ class Ubuntu():
 
         query question, similar question ids, random question ids
         """
-        path = 'askubuntu-master/train_random.txt'
         with open(path) as f:
             lines = f.readlines()
         
-        CORPUS = Ubuntu.load_corpus()
+        CORPUS = Ubuntu.load_corpus(path=corpus_path)
 
         data = []
         for line in lines:
@@ -111,8 +139,8 @@ class Ubuntu():
 
 from torch.utils.data import Dataset, DataLoader
 
-class UbuntuDataset(Dataset):
-    def __init__(self, partition='train'):
+class UbuntuDataset(Dataset): 
+    def __init__(self, name='ubuntu', partition='train'):
         """
         Loads the Ubuntu training dataset.
 
@@ -122,11 +150,9 @@ class UbuntuDataset(Dataset):
             - similar_questions
             - random_questions
 
-        similar_questions is a sublist of random_questions 
-
-        partition: valid options are 'train' or 'val'.
+        name, partition: ('ubuntu', 'train') | ('ubuntu', 'dev') | 
+                         ('android', 'dev') | ('android', 'test')
         """
-        raw_data = Ubuntu.load_training_data()
         self.query_indices = []
         self.query_titles = []
         self.query_bodies = []
@@ -135,12 +161,22 @@ class UbuntuDataset(Dataset):
         self.Y = [] # [1, 1, -1, -1, -1, 1, -1, -1 ....]
         self.len = 0 # = len(self.query_vecs) = len(self.other_vecs) = len(self.Y)
         self.partition = partition
-        if self.partition == "train":
-            start_index = 0
-            end_index = len(raw_data)-20000
-        elif self.partition == 'val':
-            start_index = len(raw_data)-20000
-            end_index = len(raw_data)
+
+        if name == 'ubuntu':
+            raw_data = Ubuntu.load_training_data()
+            if self.partition == 'train':
+                start_index = 0
+                end_index = len(raw_data)-20000
+            elif self.partition == 'dev':
+                start_index = len(raw_data)-20000
+                end_index = len(raw_data)
+        elif name == 'android':
+            if self.partition == 'train':
+                raise RuntimeError("No train data for android dataset")
+            elif self.partition in {'dev', 'test'}:
+                raw_data = Ubuntu.load_eval_data(dev_or_test=self.partition)
+                start_index = 0
+                end_index = len(raw_data)
 
         for query_idx, example in enumerate(raw_data[start_index:end_index]):
             query_title = example['query_question']['title']
@@ -152,8 +188,11 @@ class UbuntuDataset(Dataset):
                     self.Y.append( 1 )
                     other_q = example['similar_questions'][i]
                 else:
-                    self.Y.append( -1 )
-                    other_q = example['random_questions'][i]
+                    try:
+                        self.Y.append( -1 )
+                        other_q = example['random_questions'][i]
+                    except: # invalid assumption that there are 100 random questions
+                        break # (this happens in eval data)
                 other_title = other_q['title']
                 other_body = other_q['body']
                 self.query_indices.append(query_idx)
@@ -203,15 +242,14 @@ if __name__=='__main__':
 
     # Accessing ubuntu_dataset using a DataLoader
     print "Loading Ubuntu Dataset..."
-    ubuntu_dataset = UbuntuDataset()
+    ubuntu_dataset = UbuntuDataset(partition='test', name='android')
     dataloader = DataLoader(
         ubuntu_dataset, 
-        batch_size=3, # 100*n -> n questions.
+        batch_size=100, # 100*n -> n questions.
         shuffle=False,
         num_workers=0,
         collate_fn=batchify
     )
-    sys.exit(0)
 
     for i_batch, (q_indices, padded_things, ys) in enumerate(dataloader):
         print("batch #{}".format(i_batch)) 

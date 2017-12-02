@@ -140,7 +140,7 @@ class Ubuntu(): #TODO: Rename this.
 from torch.utils.data import Dataset, DataLoader
 
 class UbuntuDataset(Dataset): 
-    def __init__(self, name='ubuntu', partition='train'):
+    def __init__(self, args, name='ubuntu', partition='train'):
         """
         Loads the Ubuntu training dataset.
 
@@ -166,9 +166,9 @@ class UbuntuDataset(Dataset):
             raw_data = Ubuntu.load_training_data()
             if self.partition == 'train':
                 start_index = 0
-                end_index = len(raw_data)-20000
+                end_index = len(raw_data)-5000
             elif self.partition == 'dev':
-                start_index = len(raw_data)-20000
+                start_index = len(raw_data)-5000
                 end_index = len(raw_data)
         elif name == 'android':
             if self.partition == 'train':
@@ -183,7 +183,7 @@ class UbuntuDataset(Dataset):
             query_body = example['query_question']['body']
 
             sim_count = len(example['similar_questions'])
-            for i in range(100):
+            for i in range(args.other_questions_size):
                 if i < sim_count:
                     self.Y.append( 1 )
                     other_q = example['similar_questions'][i]
@@ -200,7 +200,7 @@ class UbuntuDataset(Dataset):
                 self.query_bodies.append(query_body)
                 self.other_titles.append(other_title)
                 self.other_bodies.append(other_body)
-            self.len += 100
+            self.len += args.other_questions_size
 
     def __len__(self):
         return self.len

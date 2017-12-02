@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from torch.nn.utils.rnn import pack_padded_sequence
 from dataloader import create_variable
+import numpy as np
 
 def pack( (seq_tensor, seq_lengths) ):
     # SORT YOUR TENSORS BY LENGTH!
@@ -14,7 +15,8 @@ def pack( (seq_tensor, seq_lengths) ):
     # print "seq_tensor ater transposing", seq_tensor.size() #, seq_tensor.data
 
     # pack them up nicely
-    packed_input = pack_padded_sequence(seq_tensor, seq_lengths.cpu().numpy())
+    seq_lengths_numpy = np.maximum(seq_lengths.cpu().numpy(), 1) # eliminate any sequence lengths of 0
+    packed_input = pack_padded_sequence(seq_tensor, seq_lengths_numpy)
 
     return (packed_input, perm_idx)
 

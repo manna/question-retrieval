@@ -55,8 +55,6 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
     print "Epoch {}".format(epoch)
     count = 0
     total_loss = 0
-    current_q_idx = 0 # represents the query index we are currently iterating over
-    current_q_results = [] # contains a list of tuples. first element of tuple is ground truth label (1 or -1) of question; 2nd is question score.
     top1_precision = 0.
     top5_precision = 0.
     MAP = 0.
@@ -82,36 +80,85 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
         query_embed = (query_title + query_body) / 2
         other_embed = (other_title + other_body) / 2
 
-        batch_avg_loss = criterion(query_embed, other_embed, ys)
-        total_loss += batch_avg_loss.data[0]
-        count += 1
-        print "total (sum) loss for batch {} was {}".format(i_batch, batch_avg_loss.data[0])
+        # BEGINNING OF NEW CODE WITH SUBBATCHES
+        # beginning of subbatches
+        for i_subbatch_start_idx in range(0, args.batch_size, args.other_questions_size):
+            # beginning of loss function code
+            subbatch_avg_loss = criterion(query_embed[i_subbatch_start_idx: i_subbatch_start_idx+args.other_questions_size],
+                other_embed[i_subbatch_start_idx: i_subbatch_start_idx+args.other_questions_size],
+                ys[i_subbatch_start_idx: i_subbatch_start_idx+args.other_questions_size])
+            total_loss += subbatch_avg_loss.data[0]
+            count += 1
+            subbatch_num = (i_subbatch_start_idx/args.other_questions_size) + 1
+            print "total (sum) loss for subbatch {} within batch {} was {}".format(subbatch_num, i_batch, subbatch_avg_loss.data[0])
+            if mode == 'train':
+                subbatch_avg_loss.backward()
+                optimizer.step()
+
+
+            # beginning of precision metrics code
+            current_q_idx = q_indices[i_subbatch_start_idx] # represents the query index we are currently iterating over
+            current_q_results = [] # contains a list of tuples. first element of tuple is ground truth label (1 or -1) of question; 2nd is question score.
+            for i_element in range(i_subbatch_start_idx, i_subbatch_start_idx+args.other_questions_size):
+                element_score = F.cosine_similarity(query_embed[i_element], other_embed[i_element], dim=0)
+                current_q_results.append((ys.data[i_element], element_score.data[0]))
+
+            current_q_results = sorted(current_q_results, key=lambda result: result[1])[::-1]
+            current_q_top1_good_count = len([result for result in current_q_results[:1] if result[0] == 1])
+            current_q_top5_good_count = len([result for result in current_q_results[:5] if result[0] == 1])
+            current_q_question_labels, _ = zip(*current_q_results)
+
+            # compute stats for MRR and MAP for current question
+            first_positive_idx = current_q_question_labels.index(1)
+            current_q_MRR = 1./(first_positive_idx+1)
+            
+            positive_indices = [question_idx for question_idx in range(len(current_q_question_labels)) if current_q_question_labels[question_idx]==1]
+            current_q_MAP = np.mean([float(i+1)/(positive_indices[i]+1) for i in range(len(positive_indices))]) 
+
+            top1_precision = get_moving_average(top1_precision, current_q_idx, 1, current_q_top1_good_count)
+            top5_precision = get_moving_average(top5_precision, 5*current_q_idx, 5, current_q_top5_good_count)
+            MRR = get_moving_average(MRR, current_q_idx, 1, current_q_MRR)
+            MAP = get_moving_average(MAP, current_q_idx, 1, current_q_MAP)
+
+        # END OF NEW CODE WITH SUBBATCHES
+
+        # BEGINNING OF OLD CODE THAT MUST BE REPLACED
+        # batch_avg_loss = criterion(query_embed, other_embed, ys)
+        # total_loss += batch_avg_loss.data[0]
+        # count += 1
+        # print "total (sum) loss for batch {} was {}".format(i_batch, batch_avg_loss.data[0])
         
-        for i_element in range(args.batch_size): 
-            # for computing accuracy metrics
-            if q_indices[i_element] != current_q_idx:
-                current_q_results = sorted(current_q_results, key=lambda result: result[1])[::-1]
-                current_q_top1_good_count = len([result for result in current_q_results[:1] if result[0] == 1])
-                current_q_top5_good_count = len([result for result in current_q_results[:5] if result[0] == 1])
-                current_q_question_labels, _ = zip(*current_q_results)
+        # for i_element in range(args.batch_size): 
+        #     # for computing accuracy metrics
+        #     if q_indices[i_element] != current_q_idx:
+        #         current_q_results = sorted(current_q_results, key=lambda result: result[1])[::-1]
+        #         current_q_top1_good_count = len([result for result in current_q_results[:1] if result[0] == 1])
+        #         current_q_top5_good_count = len([result for result in current_q_results[:5] if result[0] == 1])
+        #         current_q_question_labels, _ = zip(*current_q_results)
 
-                # compute stats for MRR and MAP for current question
-                first_positive_idx = current_q_question_labels.index(1)
-                current_q_MRR = 1./(first_positive_idx+1)
+        #         # compute stats for MRR and MAP for current question
+        #         first_positive_idx = current_q_question_labels.index(1)
+        #         current_q_MRR = 1./(first_positive_idx+1)
                 
-                positive_indices = [question_idx for question_idx in range(len(current_q_question_labels)) if current_q_question_labels[question_idx]==1]
-                current_q_MAP = np.mean([float(i+1)/(positive_indices[i]+1) for i in range(len(positive_indices))]) 
+        #         positive_indices = [question_idx for question_idx in range(len(current_q_question_labels)) if current_q_question_labels[question_idx]==1]
+        #         current_q_MAP = np.mean([float(i+1)/(positive_indices[i]+1) for i in range(len(positive_indices))]) 
 
-                top1_precision = get_moving_average(top1_precision, current_q_idx, 1, current_q_top1_good_count)
-                top5_precision = get_moving_average(top5_precision, 5*current_q_idx, 5, current_q_top5_good_count)
-                MRR = get_moving_average(MRR, current_q_idx, 1, current_q_MRR)
-                MAP = get_moving_average(MAP, current_q_idx, 1, current_q_MAP)
+        #         top1_precision = get_moving_average(top1_precision, current_q_idx, 1, current_q_top1_good_count)
+        #         top5_precision = get_moving_average(top5_precision, 5*current_q_idx, 5, current_q_top5_good_count)
+        #         MRR = get_moving_average(MRR, current_q_idx, 1, current_q_MRR)
+        #         MAP = get_moving_average(MAP, current_q_idx, 1, current_q_MAP)
 
-                current_q_idx = q_indices[i_element]
-                current_q_results = []
+        #         current_q_idx = q_indices[i_element]
+        #         current_q_results = []
 
-            element_score = criterion(query_embed[i_element:i_element+1], other_embed[i_element: i_element+1], torch.abs(ys[i_element: i_element+1]))
-            current_q_results.append((ys.data[i_element], element_score.data[0]))
+        #     element_score = F.cosine_similarity(query_embed[i_element], other_embed[i_element], dim=0)
+        #     current_q_results.append((ys.data[i_element], element_score.data[0]))
+
+        # if mode == 'train':
+        #     batch_avg_loss.backward()
+        #     optimizer.step()
+
+        # END OF OLD CODE THAT MUST BE REPLACED
 
         if i_batch % args.stats_display_interval == 0:
             print "current q_idx: %i"%current_q_idx
@@ -119,10 +166,6 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
             print "average top5 precision seen so far until batch %i was %f"%(i_batch, top5_precision)
             print "average MAP seen so far until batch %i was %f"%(i_batch, MAP)
             print "average MRR seen so far until batch %i was %f"%(i_batch, MRR)
-
-        if mode == 'train':
-            batch_avg_loss.backward()
-            optimizer.step()
 
     avg_loss = total_loss / count
     print "average {} loss for epoch {} was {}".format(mode, epoch, avg_loss)
@@ -146,19 +189,19 @@ def main(args):
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
     # training_data = Ubuntu.load_training_data()
     print "Initializing Ubuntu Dataset..."
-    train_dataset = UbuntuDataset(name='ubuntu', partition='train')
+    train_dataset = UbuntuDataset(args, name='ubuntu', partition='train')
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=args.batch_size, # 100*n -> n questions.
-        shuffle=False, # if shuffle=True, accuracy metrics will get screwed up
+        shuffle=False,
         num_workers=8,
         collate_fn=batchify
     )
-    val_dataset = UbuntuDataset(name='ubuntu', partition='dev')
+    val_dataset = UbuntuDataset(args, name='ubuntu', partition='dev')
     val_dataloader = DataLoader(
         val_dataset,
         batch_size=args.batch_size, # 100*n -> n questions.
-        shuffle=False, # if shuffle=True, accuracy metrics will get screwed up
+        shuffle=False, 
         num_workers=8,
         collate_fn=batchify
     )
@@ -176,8 +219,9 @@ if __name__=="__main__":
     parser.add_argument('--input_size', default=200, type=int)
 
     # training parameters
-    parser.add_argument('--batch_size', default=100, type=int)
-    parser.add_argument('--epochs', default=20, type=int)
+    parser.add_argument('--batch_size', default=100, type=int) # constraint: batch_size must be a multiple of other_questions_size
+    parser.add_argument('--other_questions_size', default=100, type=int) # the number of other questions that we want to have for each query
+    parser.add_argument('--epochs', default=2, type=int)
     parser.add_argument('--lr', default=0.005, type=float)
 
     # miscellaneous

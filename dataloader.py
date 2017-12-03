@@ -4,6 +4,7 @@ import torch
 import cPickle as pickle
 import collections
 import sys
+import functools
 
 from torch.autograd import Variable
 def create_variable(tensor):
@@ -140,7 +141,7 @@ class Ubuntu(): #TODO: Rename this.
 from torch.utils.data import Dataset, DataLoader
 
 class UbuntuDataset(Dataset): 
-    def __init__(self, args, name='ubuntu', partition='train'):
+    def __init__(self, examples_per_query=20, name='ubuntu', partition='train'):
         """
         Loads the Ubuntu training dataset.
 
@@ -183,7 +184,7 @@ class UbuntuDataset(Dataset):
             query_body = example['query_question']['body']
 
             sim_count = len(example['similar_questions'])
-            for i in range(args.other_questions_size):
+            for i in range(examples_per_query):
                 if i < sim_count:
                     self.Y.append( 1 )
                     other_q = example['similar_questions'][i]
@@ -191,7 +192,7 @@ class UbuntuDataset(Dataset):
                     try:
                         self.Y.append( -1 )
                         other_q = example['random_questions'][i]
-                    except: # invalid assumption that there are 100 random questions
+                    except: # invalid assumption that there are args.examples_per_query random questions
                         break # (this happens in eval data)
                 other_title = other_q['title']
                 other_body = other_q['body']
@@ -200,7 +201,7 @@ class UbuntuDataset(Dataset):
                 self.query_bodies.append(query_body)
                 self.other_titles.append(other_title)
                 self.other_bodies.append(other_body)
-            self.len += args.other_questions_size
+            self.len += examples_per_query
 
     def __len__(self):
         return self.len
@@ -222,14 +223,10 @@ def pad(vectorized_seqs, embedding_size=200):
 
     return (seq_tensor, seq_lengths)
 
-
 def batchify(data):
     q_indices, q_titles, q_bodies, o_titles, o_bodies, ys = zip(*data)
-
     padded_things = map(pad, (q_titles, q_bodies, o_titles, o_bodies))
-    
-    return torch.LongTensor(q_indices), padded_things, torch.LongTensor(ys),  
-
+    return torch.LongTensor(q_indices), padded_things, torch.LongTensor(ys)
 
 if __name__=='__main__':
     #Demo usage
@@ -241,11 +238,12 @@ if __name__=='__main__':
     # print(len(data_item['random_questions'])) # 100
 
     # Accessing ubuntu_dataset using a DataLoader
+
     print "Loading Ubuntu Dataset..."
     ubuntu_dataset = UbuntuDataset(partition='test', name='android')
     dataloader = DataLoader(
         ubuntu_dataset, 
-        batch_size=100, # 100*n -> n questions.
+        batch_size=100, # 20*n -> n questions.
         shuffle=False,
         num_workers=0,
         collate_fn=batchify

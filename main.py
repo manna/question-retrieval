@@ -133,7 +133,7 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
             print "average MRR seen so far until batch %i was %f"%(i_batch, MRR)
 
         if mode == 'train':
-            batch_avg_loss.backward()
+            batch_loss.backward()
             optimizer.step()
 
     avg_loss = total_loss / queries_count

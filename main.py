@@ -9,6 +9,7 @@ from lstm_model import LSTMRetrieval
 from cnn_model import CNN
 from IPython import embed
 import numpy as np
+from collections import defaultdict
 
 class MaxMarginCosineSimilarityLoss(_Loss):
     def __init__(self, examples_per_query=20):
@@ -140,6 +141,14 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
     print "average {} loss for epoch {} was {}".format(mode, epoch, avg_loss)
 
 def main(args):
+    load, save, train, evaluate = args.load, args.save, not args.no_train, not args.no_evaluate
+    del args.load
+    del args.save
+    del args.no_train
+    del args.no_evaluate
+
+    # MODEL
+
     if args.model_type == 'lstm':
         print "----LSTM----"
         model = LSTMRetrieval(args.input_size, args.hidden_size, batch_size=args.batch_size)
@@ -148,14 +157,29 @@ def main(args):
         model = CNN(args.input_size, args.hidden_size, batch_size=args.batch_size)
     else:
         raise RuntimeError('Unknown --model_type')
-    
+
+    if load:
+        print "Loading Model state from 'Model({}).pth'".format(args)
+        model.load_state_dict(torch.load('Model({}).pth'.format(args)))
+
+    # CUDA
+
     if torch.cuda.is_available():
         print "Using CUDA"
         model = model.cuda()
         model.share_memory()
+
+    # Loss function and Optimizer
     loss_function = MaxMarginCosineSimilarityLoss()
-    
+
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
+    if load:
+        print "Loading Optimizer state from 'Optimizer({}).pth'".format(args)
+        optimizer.load_state_dict(torch.load('Optimizer({}).pth'.format(args)))
+        optimizer.state = defaultdict(dict, optimizer.state) # https://discuss.pytorch.org/t/saving-and-loading-sgd-optimizer/2536/5
+
+    # Data
+
     # training_data = Ubuntu.load_training_data()
     print "Initializing Ubuntu Dataset..."
     train_dataset = UbuntuDataset(name='ubuntu', partition='train')
@@ -174,13 +198,29 @@ def main(args):
         num_workers=8,
         collate_fn=batchify
     )
+
     for epoch in xrange(args.epochs):
-        run_epoch(args, train_dataloader, model, loss_function, optimizer, epoch, mode='train')
-        if epoch % args.val_epoch == 0:
-            run_epoch(args, val_dataloader, model, loss_function, optimizer, epoch, mode='val')
+        if train:
+            run_epoch(args, train_dataloader, model, loss_function, optimizer, epoch, mode='train')
+        if evaluate:
+            if epoch % args.val_epoch == 0:
+                run_epoch(args, val_dataloader, model, loss_function, optimizer, epoch, mode='val')
+
+    if save:
+        print "Saving Model state to 'Model({}).pth'".format(args)
+        torch.save(model.state_dict(), 'Model({}).pth'.format(args))
+        print "Saving Optimizer state to 'Optimizer({}).pth'".format(args)
+        torch.save(optimizer.state_dict(), 'Optimizer({}).pth'.format(args))
+    
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
+
+    # loading and saving models. 'store_true' flags default to False. 
+    parser.add_argument('--load', action='store_true')
+    parser.add_argument('--save', action='store_true')
+    parser.add_argument('--no-train', action='store_true')
+    parser.add_argument('--no-evaluate', action='store_true')
 
     # model parameters
     parser.add_argument('--model_type', default='lstm', type=str, choices=['lstm', 'cnn'])

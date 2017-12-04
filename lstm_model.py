@@ -68,21 +68,22 @@ def pack( (seq_tensor, seq_lengths) ):
 
 class LSTMRetrieval(nn.Module):
     
-    def __init__(self, embedding_dim, hidden_dim, batch_size=1):
+    def __init__(self, embedding_dim, hidden_dim, num_layers, batch_size=1):
         super(LSTMRetrieval, self).__init__()
         self.hidden_dim = hidden_dim
         self.batch_size = batch_size
+        self.num_layers = num_layers
         # The LSTM takes word embeddings as inputs, and outputs hidden states
         # with dimensionality hidden_dim.
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=False)
+        self.lstm = nn.LSTM(embedding_dim, hidden_dim, self.num_layers, batch_first=False)
         self.hidden = self.init_hidden()
         
     def init_hidden(self):
         # Before we've done anything, we dont have any hidden state.
         # Refer to the Pytorch documentation to see exactly why they have this dimensionality.
         # The axes semantics are (num_layers, minibatch_size, hidden_dim)
-        h0 = create_variable(torch.zeros(1, self.batch_size, self.hidden_dim))
-        c0 = create_variable(torch.zeros(1, self.batch_size, self.hidden_dim))
+        h0 = create_variable(torch.zeros(self.num_layers, self.batch_size, self.hidden_dim))
+        c0 = create_variable(torch.zeros(self.num_layers, self.batch_size, self.hidden_dim))
         return (h0, c0)
         
     def forward(self, seq_tensor, seq_lengths):

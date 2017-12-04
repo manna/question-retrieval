@@ -151,7 +151,7 @@ def main(args):
 
     if args.model_type == 'lstm':
         print "----LSTM----"
-        model = LSTMRetrieval(args.input_size, args.hidden_size, batch_size=args.batch_size)
+        model = LSTMRetrieval(args.input_size, args.hidden_size, args.num_layers, batch_size=args.batch_size)
     elif args.model_type == 'cnn':
         print "----CNN----"
         model = CNN(args.input_size, args.hidden_size, batch_size=args.batch_size)
@@ -224,8 +224,9 @@ if __name__=="__main__":
 
     # model parameters
     parser.add_argument('--model_type', default='lstm', type=str, choices=['lstm', 'cnn'])
-    parser.add_argument('--hidden_size', default=150, type=int)
+    parser.add_argument('--hidden_size', default=200, type=int)
     parser.add_argument('--input_size', default=200, type=int)
+    parser.add_argument('--num_layers', default=3, type=int)
 
     # training parameters
     parser.add_argument('--batch_size', default=100, type=int) # constraint: batch_size must be a multiple of other_questions_size

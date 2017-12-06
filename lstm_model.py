@@ -1,6 +1,24 @@
 import torch
 from torch import nn
-from torch.autograd import Variable
+from torch.nn.utils.rnn import pack_padded_sequence
+from dataloader import create_variable
+import numpy as np
+
+def pack( (seq_tensor, seq_lengths) ):
+    # SORT YOUR TENSORS BY LENGTH!
+    seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
+    seq_tensor = seq_tensor[perm_idx]
+
+    # utils.rnn lets you give (B,L,D) tensors where B is the batch size, L is the maxlength, if you use batch_first=True
+    # Otherwise, give (L,B,D) tensors
+    seq_tensor = seq_tensor.transpose(0, 1)  # (B,L,D) -> (L,B,D)
+    # print "seq_tensor ater transposing", seq_tensor.size() #, seq_tensor.data
+
+    # pack them up nicely
+    seq_lengths_numpy = np.maximum(seq_lengths.cpu().numpy(), 1) # eliminate any sequence lengths of 0
+    packed_input = pack_padded_sequence(seq_tensor, seq_lengths_numpy)
+
+    return (packed_input, perm_idx)
 
 # class LSTM(nn.Module):
 #     def __init__(self, input_size, hidden_size, num_layers=1, avg_pool=True):
@@ -50,24 +68,29 @@ from torch.autograd import Variable
 
 class LSTMRetrieval(nn.Module):
     
-    def __init__(self, embedding_dim, hidden_dim, num_layers=1, batch_size=1):
+    def __init__(self, embedding_dim, hidden_dim, num_layers, batch_size=1):
         super(LSTMRetrieval, self).__init__()
         self.hidden_dim = hidden_dim
         self.batch_size = batch_size
+        self.num_layers = num_layers
         # The LSTM takes word embeddings as inputs, and outputs hidden states
         # with dimensionality hidden_dim.
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=False)
+        self.lstm = nn.LSTM(embedding_dim, hidden_dim, self.num_layers, batch_first=False)
         self.hidden = self.init_hidden()
         
     def init_hidden(self):
         # Before we've done anything, we dont have any hidden state.
         # Refer to the Pytorch documentation to see exactly why they have this dimensionality.
         # The axes semantics are (num_layers, minibatch_size, hidden_dim)
-        h0 = Variable(torch.zeros(1, self.batch_size, self.hidden_dim))
-        c0 = Variable(torch.zeros(1, self.batch_size, self.hidden_dim))
+        h0 = create_variable(torch.zeros(self.num_layers, self.batch_size, self.hidden_dim))
+        c0 = create_variable(torch.zeros(self.num_layers, self.batch_size, self.hidden_dim))
         return (h0, c0)
         
-    def forward(self, packed_input, perm_idx):
+    def forward(self, seq_tensor, seq_lengths):
+        seq_tensor = create_variable(seq_tensor)
+        if torch.cuda.is_available():
+            seq_lengths = seq_lengths.cuda()
+        packed_input, perm_idx = pack((seq_tensor, seq_lengths))
         # throw them through your LSTM (remember to give batch_first=True here if you packed with it)
         packed_output, (ht, ct) = self.lstm(packed_input)
 
@@ -77,60 +100,6 @@ class LSTMRetrieval(nn.Module):
         _, orig_idx = perm_idx.sort(0, descending=False)
         return ht[-1][orig_idx] # Return last hidden layer, after unsorting the batch
 
-    def get_embed(self, packed_seq, perm_idx):
+    def get_embed(self, seq_tensor, seq_lengths):
         self.hidden = self.init_hidden()
-        return self(packed_seq, perm_idx)
-
-if __name__=='__main__':
-    from torch.utils.data import DataLoader
-    from dataloader import UbuntuDataset, make_collate_fn
-
-    batch_size=100
-    loss_function = nn.CosineEmbeddingLoss(margin=0, size_average=False)
-    model = LSTMRetrieval(200, 150, batch_size=batch_size)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.005)
-    # training_data = Ubuntu.load_training_data()
-    print "Initializing Ubuntu Dataset..."
-    ubuntu_dataset = UbuntuDataset()
-    dataloader = DataLoader(
-        ubuntu_dataset,
-        batch_size=batch_size, # 100*n -> n questions.
-        shuffle=False,
-        num_workers=8,
-        collate_fn=make_collate_fn(pack_it=True)
-    )
-
-    print "Training..."
-    for epoch in xrange(100): # again, normally you would NOT do 300 epochs, it is toy data
-        print "Epoch {}".format(epoch)
-        count = 0
-        avg_loss = 0
-
-        for i_batch, (packed_things, ys) in enumerate(dataloader):
-            print("Batch #{}".format(i_batch)) 
-            (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = packed_things
-
-            # Step 1. Remember that Pytorch accumulates gradients. 
-            # We need to clear them out before each instance
-            model.zero_grad()
-            
-            # Also, we need to clear out the hidden state of the LSTM,
-            # detaching it from its history on the last instance.
-            query_title = model.get_embed(qt_seq, qt_perm)
-            query_body = model.get_embed(qb_seq, qb_perm)
-            other_title = model.get_embed(ot_seq, ot_perm)
-            other_body = model.get_embed(ob_seq, ob_perm)
-
-            query_embed = (query_title + query_body) / 2
-            other_embed = (other_title + other_body) / 2
-
-            batch_avg_loss = loss_function(query_embed, other_embed, ys)
-            print "total (sum) loss for batch {} was {}".format(i_batch, batch_avg_loss.data)
-            avg_loss += batch_avg_loss
-            count += 1
-
-            batch_avg_loss.backward()
-            optimizer.step()
-
-        avg_loss /= count
-        print "average loss for epoch %i was %f"%(epoch,avg_loss)
+        return self(seq_tensor, seq_lengths)

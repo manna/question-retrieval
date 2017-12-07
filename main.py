@@ -65,6 +65,7 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
         positive_indices = [question_idx for question_idx in range(len(labels)) if labels[question_idx]==1]
         current_q_MAP = np.mean([float(i+1)/(positive_indices[i]+1) for i in range(len(positive_indices))]) 
 
+
         # Update Epoch-level averages
         top1_precision = get_moving_average(top1_precision, queries_count, 1, top1_good_count)
         top5_precision = get_moving_average(top5_precision, queries_count*5, 5, top5_good_count)

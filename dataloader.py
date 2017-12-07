@@ -216,6 +216,10 @@ class UbuntuDataset(Dataset):
                 sim_count = len(example['similar_questions'])
                 for i in range(examples_per_query):
                     other_q = example['random_questions'][i]
+                    if other_q in example['similar_questions']:
+                        self.Y.append(1)
+                    else:
+                        self.Y.append(-1)
                     other_title = other_q['title']
                     other_body = other_q['body']
                     self.query_indices.append(query_idx)
@@ -223,6 +227,9 @@ class UbuntuDataset(Dataset):
                     self.query_bodies.append(query_body)
                     self.other_titles.append(other_title)
                     self.other_bodies.append(other_body)
+
+                if not 1 in self.Y[-examples_per_query:]:
+                    print query_idx
                 self.len += examples_per_query
 
         else:

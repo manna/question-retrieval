@@ -7,7 +7,6 @@ from torch.utils.data import DataLoader
 from dataloader import UbuntuDataset, batchify, create_variable
 from lstm_model import LSTMRetrieval
 from cnn_model import CNN
-from IPython import embed
 import numpy as np
 from collections import defaultdict
 
@@ -49,10 +48,10 @@ class MaxMarginCosineSimilarityLoss(_Loss):
 
         return sum(max_margin_losses)
 
+def get_moving_average(avg, num_prev_samples, num_new_samples, new_value):
+    return float(avg*num_prev_samples + new_value)/(num_prev_samples + num_new_samples)
+
 def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='train'):
-    def get_moving_average(avg, num_prev_samples, num_new_samples, new_value):
-        return float(avg*num_prev_samples + new_value)/(num_prev_samples + num_new_samples)
-    
     queries_per_batch = args.batch_size/args.examples_per_query
 
     if mode == 'train':
@@ -211,7 +210,6 @@ def main(args):
         torch.save(model.state_dict(), 'Model({}).pth'.format(args))
         print "Saving Optimizer state to 'Optimizer({}).pth'".format(args)
         torch.save(optimizer.state_dict(), 'Optimizer({}).pth'.format(args))
-    
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
@@ -229,7 +227,7 @@ if __name__=="__main__":
     parser.add_argument('--num_layers', default=3, type=int)
 
     # training parameters
-    parser.add_argument('--batch_size', default=100, type=int) # constraint: batch_size must be a multiple of other_questions_size
+    parser.add_argument('--batch_size', default=80, type=int) # constraint: batch_size must be a multiple of other_questions_size
     parser.add_argument('--examples_per_query', default=20, type=int) # the number of other questions that we want to have for each query
     parser.add_argument('--epochs', default=2, type=int)
     parser.add_argument('--lr', default=0.005, type=float)

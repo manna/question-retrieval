@@ -52,6 +52,25 @@ class MaxMarginCosineSimilarityLoss(_Loss):
 def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='train'):
     def get_moving_average(avg, num_prev_samples, num_new_samples, new_value):
         return float(avg*num_prev_samples + new_value)/(num_prev_samples + num_new_samples)
+
+    def get_metrics(labels, queries_count, top1_precision, top5_precision, MRR, MAP):
+        top1_good_count = len([label for label in labels[:1] if label == 1])
+        top5_good_count = len([label for label in labels[:5] if label == 1])
+        
+
+        # compute stats for MRR and MAP for current question
+        first_positive_idx = labels.index(1)
+        current_q_MRR = 1./(first_positive_idx+1)
+        
+        positive_indices = [question_idx for question_idx in range(len(labels)) if labels[question_idx]==1]
+        current_q_MAP = np.mean([float(i+1)/(positive_indices[i]+1) for i in range(len(positive_indices))]) 
+
+        # Update Epoch-level averages
+        top1_precision = get_moving_average(top1_precision, queries_count, 1, top1_good_count)
+        top5_precision = get_moving_average(top5_precision, queries_count*5, 5, top5_good_count)
+        MRR = get_moving_average(MRR, queries_count, 1, current_q_MRR)
+        MAP = get_moving_average(MAP, queries_count, 1, current_q_MAP)
+        return top1_precision, top5_precision, MRR, MAP
     
     queries_per_batch = args.batch_size/args.examples_per_query
 
@@ -64,10 +83,15 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
     queries_count = 0 # Queries seen so far in this epoch.
     total_loss = 0
 
-    top1_precision = 0.
-    top5_precision = 0.
-    MAP = 0.
-    MRR = 0.
+    model_top1_precision = 0.
+    model_top5_precision = 0.
+    model_MAP = 0.
+    model_MRR = 0.
+    if mode == "val":
+        bm25_top1_precision = 0.
+        bm25_top5_precision = 0.
+        bm25_MAP = 0.
+        bm25_MRR = 0.
 
     for i_batch, (_____q_indices_____, padded_things, ys) in enumerate(train_loader):
         print("Batch #{}".format(i_batch)) 
@@ -95,43 +119,43 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
         print "avg loss for batch {} was {}".format(i_batch, batch_loss.data[0]/queries_per_batch)
         
         # Initialize some things at start of batch.
-        current_q_results = [] # contains a list of tuples. first element of tuple is ground truth label (1 or -1) of question; 2nd is question score.
-
+        model_q_results = [] # contains a list of tuples. first element of tuple is ground truth label (1 or -1) of question; 2nd is question score.
+        if mode == "val":
+            bm25_labels = []
         # Iterate through the batch to compute precision metrics
         for i in range(args.batch_size): 
             element_score = F.cosine_similarity(query_embed[i], other_embed[i], dim=0)
-            current_q_results.append((ys.data[i], element_score.data[0]))
-
+            model_q_results.append((ys.data[i], element_score.data[0]))
+            if mode == "val":
+                bm25_labels.append(ys.data[i])
             # Done with subbatch
             if (i + 1) % args.examples_per_query == 0:
 
-                current_q_results = sorted(current_q_results, key=lambda result: result[1])[::-1]
-                current_q_top1_good_count = len([result for result in current_q_results[:1] if result[0] == 1])
-                current_q_top5_good_count = len([result for result in current_q_results[:5] if result[0] == 1])
-                current_q_question_labels, _ = zip(*current_q_results)
+                model_q_results = sorted(model_q_results, key=lambda result: result[1])[::-1]
+                model_q_question_labels, _ = zip(*model_q_results)
+                model_top1_precision, model_top5_precision, model_MRR, model_MAP = get_metrics(model_q_question_labels, queries_count, model_top1_precision, model_top5_precision, model_MRR, model_MAP)
 
-                # compute stats for MRR and MAP for current question
-                first_positive_idx = current_q_question_labels.index(1)
-                current_q_MRR = 1./(first_positive_idx+1)
-                
-                positive_indices = [question_idx for question_idx in range(len(current_q_question_labels)) if current_q_question_labels[question_idx]==1]
-                current_q_MAP = np.mean([float(i+1)/(positive_indices[i]+1) for i in range(len(positive_indices))]) 
+                if mode == "val":
+                    bm25_top1_precision, bm25_top5_precision, bm25_MRR, bm25_MAP = get_metrics(bm25_labels, queries_count, bm25_top1_precision, bm25_top5_precision, bm25_MRR, bm25_MAP)
+                               
 
-                # Update Epoch-level averages
-                top1_precision = get_moving_average(top1_precision, queries_count, 1, current_q_top1_good_count)
-                top5_precision = get_moving_average(top5_precision, queries_count*5, 5, current_q_top5_good_count)
-                MRR = get_moving_average(MRR, queries_count, 1, current_q_MRR)
-                MAP = get_moving_average(MAP, queries_count, 1, current_q_MAP)
-
-                # Clear current_q_results in prep for next subbatch
-                current_q_results = []
+                # Clear model_q_results in prep for next subbatch
+                model_q_results = []
+                if mode == "val":
+                    bm25_labels = []
                 queries_count += 1 # queries seen in this epoch
 
         if i_batch % args.stats_display_interval == 0:
-            print "average top1 precision seen so far until batch %i was %f"%(i_batch, top1_precision)
-            print "average top5 precision seen so far until batch %i was %f"%(i_batch, top5_precision)
-            print "average MAP seen so far until batch %i was %f"%(i_batch, MAP)
-            print "average MRR seen so far until batch %i was %f"%(i_batch, MRR)
+            print "average model top1 precision seen so far until batch %i was %f"%(i_batch, model_top1_precision)
+            print "average model top5 precision seen so far until batch %i was %f"%(i_batch, model_top5_precision)
+            print "average model MAP seen so far until batch %i was %f"%(i_batch, model_MAP)
+            print "average model MRR seen so far until batch %i was %f"%(i_batch, model_MRR)
+            if mode == "val":
+                print "average bm25 top1 precision seen so far until batch %i was %f"%(i_batch, bm25_top1_precision)
+                print "average bm25 top5 precision seen so far until batch %i was %f"%(i_batch, bm25_top5_precision)
+                print "average bm25 MAP seen so far until batch %i was %f"%(i_batch, bm25_MAP)
+                print "average bm25 MRR seen so far until batch %i was %f"%(i_batch, bm25_MRR)
+
 
         if mode == 'train':
             batch_loss.backward()
@@ -158,6 +182,7 @@ def main(args):
     else:
         raise RuntimeError('Unknown --model_type')
 
+    print load
     if load:
         print "Loading Model state from 'Model({}).pth'".format(args)
         model.load_state_dict(torch.load('Model({}).pth'.format(args)))
@@ -229,9 +254,9 @@ if __name__=="__main__":
     parser.add_argument('--num_layers', default=3, type=int)
 
     # training parameters
-    parser.add_argument('--batch_size', default=100, type=int) # constraint: batch_size must be a multiple of other_questions_size
+    parser.add_argument('--batch_size', default=80, type=int) # constraint: batch_size must be a multiple of other_questions_size
     parser.add_argument('--examples_per_query', default=20, type=int) # the number of other questions that we want to have for each query
-    parser.add_argument('--epochs', default=2, type=int)
+    parser.add_argument('--epochs', default=10, type=int)
     parser.add_argument('--lr', default=0.005, type=float)
 
     # miscellaneous

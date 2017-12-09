@@ -54,14 +54,14 @@ def run_epoch(
             query_embed = (query_title + query_body) / 2
             other_embed = (other_title + other_body) / 2
 
-            # Compute Batch Loss
-            qr_batch_loss = qr_criterion(query_embed, other_embed, ys)
-            qr_total_loss += qr_batch_loss.data[0]
-            
+            # Compute batch loss
+
             target = create_variable(torch.FloatTensor([target_domain]*args.batch_size))
 
-            query_domain = dc_model(query_embed)
-            other_domain = dc_model(other_embed)
+            query_domain, other_domain = dc_model(query_embed), dc_model(other_embed)
+
+            qr_batch_loss = qr_criterion(query_embed, other_embed, ys)
+            qr_total_loss += qr_batch_loss.data[0]
 
             dc_batch_loss = sum(dc_criterion(predicted_domain, target) 
                                 for predicted_domain in [query_domain, other_domain])
@@ -128,7 +128,7 @@ def main(args):
             model.share_memory()
 
     # Loss functions and Optimizers
-    dc_criterion = nn.L1Loss()
+    dc_criterion = nn.L1Loss() # TODO: Replace with actual.
     dc_optimizer = torch.optim.SGD(dc_model.parameters(), lr=args.dc_lr)
 
     qr_criterion = MaxMarginCosineSimilarityLoss() # TODO...

@@ -12,6 +12,20 @@ from collections import defaultdict
 from domain_classifier import DomainClassifier
 from main import MaxMarginCosineSimilarityLoss, get_moving_average
 
+from itertools import repeat, cycle, islice, izip
+def roundrobin(*iterables):
+    "roundrobin('ABC', 'D', 'EF') --> A D E B F C"
+    # Recipe credited to George Sakkis
+    pending = len(iterables)
+    nexts = cycle(iter(it).next for it in iterables)
+    while pending:
+        try:
+            for next in nexts:
+                yield next()
+        except StopIteration:
+            pending -= 1
+            nexts = cycle(islice(nexts, pending))
+
 def run_epoch(
     args, ubuntu_loader, android_loader, qr_model, qr_criterion, qr_optimizer,
     dc_model, dc_criterion, dc_optimizer, epoch, mode='train'
@@ -23,57 +37,58 @@ def run_epoch(
     elif mode == 'val':
         print "Validation..."
 
-    dataloaders = [ ubuntu_loader, android_loader ]
-    target_domains = [ 0. , 1. ]
+    data_and_target_loaders = [ izip(ubuntu_loader , repeat(0)), 
+                                izip(android_loader, repeat(1)) ]
+    data_and_target_loader = roundrobin(*data_and_target_loaders)
 
     print "Epoch {}".format(epoch)
     queries_count = 0 # Queries seen so far in this epoch.
     qr_total_loss = 0
     dc_total_loss = 0
 
-    for dataloader, target_domain in zip(dataloaders, target_domains):
-        for i_batch, (_, padded_things, ys) in enumerate(dataloader):
-            print("Batch #{}".format(i_batch)) 
-            ys = create_variable(ys)
+    for i_batch, (data, target_domain) in enumerate(data_and_target_loader):
+        _, padded_things, ys = data
 
-            qt, qb, ot, ob = padded_things # padded_things might also be packed.
-            # qt is (PackedSequence, perm_idx), or (seq_tensor, set_lengths)
+        print "Batch #{}, Domain {}".format(i_batch, target_domain)
+        ys = create_variable(ys)
 
-            # Step 1. Remember that Pytorch accumulates gradients. 
-            # We need to clear them out before each instance
-            for model in [qr_model, dc_model]:
-                model.zero_grad()
-            
-            # Also, we need to clear out the hidden state of the LSTM,
-            # detaching it from its history on the last instance.
-            query_title = qr_model.get_embed(*qt)
-            query_body = qr_model.get_embed(*qb)
-            other_title = qr_model.get_embed(*ot)
-            other_body = qr_model.get_embed(*ob)
+        qt, qb, ot, ob = padded_things # padded_things might also be packed.
+        # qt is (PackedSequence, perm_idx), or (seq_tensor, set_lengths)
 
-            query_embed = (query_title + query_body) / 2
-            other_embed = (other_title + other_body) / 2
+        # Step 1. Remember that Pytorch accumulates gradients. 
+        # We need to clear them out before each instance
+        for model in [qr_model, dc_model]:
+            model.zero_grad()
+        
+        # Generate embeddings.
+        query_title = qr_model.get_embed(*qt)
+        query_body = qr_model.get_embed(*qb)
+        other_title = qr_model.get_embed(*ot)
+        other_body = qr_model.get_embed(*ob)
 
-            # Compute batch loss
+        query_embed = (query_title + query_body) / 2
+        other_embed = (other_title + other_body) / 2
 
-            target = create_variable(torch.FloatTensor([target_domain]*args.batch_size))
+        # Classify their domains
+        query_domain, other_domain = dc_model(query_embed), dc_model(other_embed)
 
-            query_domain, other_domain = dc_model(query_embed), dc_model(other_embed)
+        # Compute batch loss
+        target = create_variable(torch.FloatTensor([float(target_domain)]*args.batch_size))
 
-            qr_batch_loss = qr_criterion(query_embed, other_embed, ys)
-            qr_total_loss += qr_batch_loss.data[0]
+        qr_batch_loss = qr_criterion(query_embed, other_embed, ys)
+        qr_total_loss += qr_batch_loss.data[0]
 
-            dc_batch_loss = sum(dc_criterion(predicted_domain, target) 
-                                for predicted_domain in [query_domain, other_domain])
-            dc_total_loss += dc_batch_loss.data[0]
-            print "avg QR loss for batch {} was {}".format(i_batch, qr_batch_loss.data[0]/queries_per_batch)
-            print "avg DC loss for batch {} was {}".format(i_batch, dc_batch_loss.data[0]/queries_per_batch)
-            
-            if mode == 'train':
-                qr_batch_loss.backward(retain_graph=True)
-                dc_batch_loss.backward()
-                for optimizer in [qr_optimizer, dc_optimizer]:
-                    optimizer.step()
+        dc_batch_loss = sum(dc_criterion(predicted_domain, target) 
+                            for predicted_domain in [query_domain, other_domain])
+        dc_total_loss += dc_batch_loss.data[0]
+        print "avg QR loss for batch {} was {}".format(i_batch, qr_batch_loss.data[0]/queries_per_batch)
+        print "avg DC loss for batch {} was {}".format(i_batch, dc_batch_loss.data[0]/queries_per_batch)
+        
+        if mode == 'train':
+            qr_batch_loss.backward(retain_graph=True)
+            dc_batch_loss.backward()
+            for optimizer in [qr_optimizer, dc_optimizer]:
+                optimizer.step()
 
     qr_avg_loss = qr_total_loss / queries_count
     dc_avg_loss = dc_total_loss / queries_count

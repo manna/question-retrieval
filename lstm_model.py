@@ -61,7 +61,7 @@ class LSTMRetrieval(nn.Module):
             if torch.cuda.is_available():
                 sorted_lengths_variable = sorted_lengths_variable.cuda()
             avg_output = output * (1/sorted_lengths_variable).unsqueeze(1).expand(self.batch_size, self.hidden_dim)
-            return avg_output
+            return avg_output[orig_idx]
         # _, original_idx = perm_idx.sort(0, descending=False)
 
         # unsorted_idx = original_idx.view(1,-1,1).expand_as(self.hidden)

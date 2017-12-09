@@ -77,19 +77,21 @@ def run_epoch(
 
         qr_batch_loss = qr_criterion(query_embed, other_embed, ys)
         qr_total_loss += qr_batch_loss.data[0]
+        print "avg QR loss for batch {} was {}".format(i_batch, qr_batch_loss.data[0]/queries_per_batch)
 
         dc_batch_loss = sum(dc_criterion(predicted_domain, target) 
                             for predicted_domain in [query_domain, other_domain])
         dc_total_loss += dc_batch_loss.data[0]
-        print "avg QR loss for batch {} was {}".format(i_batch, qr_batch_loss.data[0]/queries_per_batch)
         print "avg DC loss for batch {} was {}".format(i_batch, dc_batch_loss.data[0]/queries_per_batch)
         
         if mode == 'train':
-            qr_batch_loss.backward(retain_graph=True)
+            if target_domain == 0: # ubuntu. We don't have android training data for QR.
+                qr_batch_loss.backward(retain_graph=True)
+                qr_optimizer.step()
+            else:
+                pass # android. 
             dc_batch_loss.backward()
-            for optimizer in [qr_optimizer, dc_optimizer]:
-                optimizer.step()
-
+            dc_optimizer.step()
     qr_avg_loss = qr_total_loss / queries_count
     dc_avg_loss = dc_total_loss / queries_count
     print "average {} QR loss for epoch {} was {}".format(mode, epoch, qr_avg_loss)
@@ -103,19 +105,33 @@ def main(args):
     del args.no_evaluate
 
     print "Initializing Ubuntu Dataset..."
-    ubuntu_loader = DataLoader(
+    ubuntu_train_loader = DataLoader(
         UbuntuDataset(name='ubuntu', partition='train'),
-        batch_size=args.batch_size, # 100*n -> n questions.
+        batch_size=args.batch_size, # 20*n -> n questions.
+        shuffle=False,
+        num_workers=8,
+        collate_fn=batchify
+    )
+    ubuntu_val_loader = DataLoader(
+        UbuntuDataset(name='ubuntu', partition='dev'),
+        batch_size=args.batch_size, # 20*n -> n questions.
         shuffle=False,
         num_workers=8,
         collate_fn=batchify
     )
 
     print "Initializing Android Dataset..."
-    # Note, there is no training data, just validation data, for Android.
-    android_loader = DataLoader(
+    # Note, Android train data isn't labeled.
+    android_train_loader = DataLoader(
+        UbuntuDataset(name='android', partition='dev'), # TODO use train when it becomes availlable
+        batch_size=args.batch_size, # 20*n -> n questions.
+        shuffle=False,
+        num_workers=8,
+        collate_fn=batchify
+    )
+    android_val_loader = DataLoader(
         UbuntuDataset(name='android', partition='dev'),
-        batch_size=args.batch_size, # 100*n -> n questions.
+        batch_size=args.batch_size, # 20*n -> n questions.
         shuffle=False,
         num_workers=8,
         collate_fn=batchify
@@ -152,14 +168,14 @@ def main(args):
     for epoch in xrange(args.epochs):
         if train:
             run_epoch(
-                args, ubuntu_loader, android_loader, qr_model, qr_criterion, 
+                args, ubuntu_train_loader, android_train_loader, qr_model, qr_criterion, 
                 qr_optimizer, dc_model, dc_criterion, dc_optimizer, epoch, 
                 mode='train'
             )
         if evaluate:
             if epoch % args.val_epoch == 0:
                 run_epoch(
-                    args, ubuntu_loader, android_loader, qr_model, qr_criterion, 
+                    args, ubuntu_val_loader, android_val_loader, qr_model, qr_criterion, 
                     qr_optimizer, dc_model, dc_criterion, dc_optimizer, epoch, 
                     mode='val'
                 )

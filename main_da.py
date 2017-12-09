@@ -47,7 +47,7 @@ def run_epoch(
     dc_total_loss = 0
 
     for i_batch, (data, target_domain) in enumerate(data_and_target_loader):
-        _, padded_things, ys = data
+        padded_things, ys = data
 
         print "Batch #{}, Domain {}".format(i_batch, target_domain)
         ys = create_variable(ys)

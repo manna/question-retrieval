@@ -29,5 +29,4 @@ def preprocess(mode):
 
 for mode in ['dev', 'test']:
   with open('Android-master/{}.txt'.format(mode), 'w') as f:
-    for line in preprocess(mode):
-      f.write(line)
+    f.write('\n'.join(preprocess(mode)))      

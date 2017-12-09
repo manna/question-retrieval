@@ -57,7 +57,9 @@ class LSTMRetrieval(nn.Module):
             return ht[-1][orig_idx] # Return last hidden layer, after unsorting the batch
         else:
             output = torch.sum(output, dim=0)
-            sorted_lengths_variable = torch.autograd.Variable(torch.Tensor(sorted_lengths)).float() # convert sorted_lengths list to variable
+            sorted_lengths_variable = torch.autograd.Variable(torch.Tensor(sorted_lengths)) # convert sorted_lengths list to variable
+            if torch.cuda.is_available():
+                sorted_lengths_variable = sorted_lengths_variable.cuda()
             avg_output = output * (1/sorted_lengths_variable).unsqueeze(1).expand(self.batch_size, self.hidden_dim)
             return avg_output
         # _, original_idx = perm_idx.sort(0, descending=False)

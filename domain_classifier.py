@@ -18,7 +18,7 @@ class DomainClassifier(nn.Module):
 
     def forward(self, x):
         # x.size() is (batch_size, input_dim)
-        x = create_variable(x)
+        # x = create_variable(x)
         out = self.net(x)
         # out = out.view(out.size(0), -1)
         return out

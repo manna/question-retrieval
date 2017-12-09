@@ -23,12 +23,15 @@ def run_epoch(
     elif mode == 'val':
         print "Validation..."
 
+    dataloaders = [ ubuntu_loader, android_loader ]
+    target_domains = [ 0. , 1. ]
+
     print "Epoch {}".format(epoch)
     queries_count = 0 # Queries seen so far in this epoch.
     qr_total_loss = 0
     dc_total_loss = 0
 
-    for dataloader, target_domain in [(ubuntu_loader, 0.), (android_loader, 1.)]:
+    for dataloader, target_domain in zip(dataloaders, target_domains):
         for i_batch, (_, padded_things, ys) in enumerate(dataloader):
             print("Batch #{}".format(i_batch)) 
             ys = create_variable(ys)
@@ -56,15 +59,19 @@ def run_epoch(
             qr_total_loss += qr_batch_loss.data[0]
             
             target = create_variable(torch.FloatTensor([target_domain]*args.batch_size))
-            dc_batch_loss = sum(dc_criterion(e, target) 
-                                for e in [query_embed, other_embed])
+
+            query_domain = dc_model(query_embed)
+            other_domain = dc_model(other_embed)
+
+            dc_batch_loss = sum(dc_criterion(predicted_domain, target) 
+                                for predicted_domain in [query_domain, other_domain])
             dc_total_loss += dc_batch_loss.data[0]
             print "avg QR loss for batch {} was {}".format(i_batch, qr_batch_loss.data[0]/queries_per_batch)
             print "avg DC loss for batch {} was {}".format(i_batch, dc_batch_loss.data[0]/queries_per_batch)
             
             if mode == 'train':
-                for batch_loss in [qr_batch_loss, dc_batch_loss]:
-                    batch_loss.backward()
+                qr_batch_loss.backward(retain_graph=True)
+                dc_batch_loss.backward()
                 for optimizer in [qr_optimizer, dc_optimizer]:
                     optimizer.step()
 
@@ -90,6 +97,7 @@ def main(args):
     )
 
     print "Initializing Android Dataset..."
+    # Note, there is no training data, just validation data, for Android.
     android_loader = DataLoader(
         UbuntuDataset(name='android', partition='dev'),
         batch_size=args.batch_size, # 100*n -> n questions.

@@ -1,6 +1,8 @@
 """
 A Script that combines Android-master/{dev|test}.pos.txt and
 Android-master/{dev|test}.neg.txt into Android-master/{dev|test}.txt
+
+The output files have the exact same format as "askubuntu-master/train_random.txt"
 """
 from collections import OrderedDict
 

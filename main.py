@@ -17,8 +17,10 @@ class MaxMarginCosineSimilarityLoss(_Loss):
 
     def forward(self, queries, others, targets):
         """ 
-        Weakly assumes only one positive example.
-        In that case, this loss function is exactly as described in arxiv 1512.05726
+        Requires that there is at least one positive example.
+
+        If there is exactly 1 positive example:
+            this loss function is exactly as described in arxiv 1512.05726
         """
         batch_size = targets.size()[0]
         min_positive_score = None

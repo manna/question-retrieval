@@ -57,13 +57,16 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
         top1_good_count = len([label for label in labels[:1] if label == 1])
         top5_good_count = len([label for label in labels[:5] if label == 1])
         
-
-        # compute stats for MRR and MAP for current question
-        first_positive_idx = labels.index(1)
-        current_q_MRR = 1./(first_positive_idx+1)
-        
-        positive_indices = [question_idx for question_idx in range(len(labels)) if labels[question_idx]==1]
-        current_q_MAP = np.mean([float(i+1)/(positive_indices[i]+1) for i in range(len(positive_indices))]) 
+        if 1 in labels:
+            # compute stats for MRR and MAP for current question
+            first_positive_idx = labels.index(1)
+            current_q_MRR = 1./(first_positive_idx+1)
+            
+            positive_indices = [question_idx for question_idx in range(len(labels)) if labels[question_idx]==1]
+            current_q_MAP = np.mean([float(i+1)/(positive_indices[i]+1) for i in range(len(positive_indices))]) 
+        else:
+            current_q_MRR = 0.
+            current_q_MAP = 0.
 
 
         # Update Epoch-level averages
@@ -94,7 +97,7 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
         bm25_MAP = 0.
         bm25_MRR = 0.
 
-    for i_batch, (_____q_indices_____, padded_things, ys) in enumerate(train_loader):
+    for i_batch, (padded_things, ys) in enumerate(train_loader):
         print("Batch #{}".format(i_batch)) 
         ys = create_variable(ys)
 
@@ -115,9 +118,10 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
         query_embed = (query_title + query_body) / 2
         other_embed = (other_title + other_body) / 2
 
-        batch_loss = criterion(query_embed, other_embed, ys)
-        total_loss += batch_loss.data[0]
-        print "avg loss for batch {} was {}".format(i_batch, batch_loss.data[0]/queries_per_batch)
+        if mode == "train":
+            batch_loss = criterion(query_embed, other_embed, ys)
+            total_loss += batch_loss.data[0]
+            print "avg loss for batch {} was {}".format(i_batch, batch_loss.data[0]/queries_per_batch)
         
         # Initialize some things at start of batch.
         model_q_results = [] # contains a list of tuples. first element of tuple is ground truth label (1 or -1) of question; 2nd is question score.
@@ -176,10 +180,10 @@ def main(args):
 
     if args.model_type == 'lstm':
         print "----LSTM----"
-        model = LSTMRetrieval(args.input_size, args.hidden_size, args.num_layers, batch_size=args.batch_size)
+        model = LSTMRetrieval(args.input_size, args.hidden_size, args.num_layers, args.pool, batch_size=args.batch_size)
     elif args.model_type == 'cnn':
         print "----CNN----"
-        model = CNN(args.input_size, args.hidden_size, batch_size=args.batch_size)
+        model = CNN(args.input_size, args.hidden_size, args.pool, batch_size=args.batch_size)
     else:
         raise RuntimeError('Unknown --model_type')
 
@@ -253,6 +257,7 @@ if __name__=="__main__":
     parser.add_argument('--hidden_size', default=200, type=int)
     parser.add_argument('--input_size', default=200, type=int)
     parser.add_argument('--num_layers', default=3, type=int)
+    parser.add_argument('--pool', default='max', type=str, choices=['max', 'avg'])
 
     # training parameters
     parser.add_argument('--batch_size', default=80, type=int) # constraint: batch_size must be a multiple of other_questions_size

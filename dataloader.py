@@ -180,7 +180,6 @@ class UbuntuDataset(Dataset):
         name, partition: ('ubuntu', 'train') | ('ubuntu', 'dev') | 
                          ('android', 'dev') | ('android', 'test')
         """
-        self.query_indices = []
         self.query_titles = []
         self.query_bodies = []
         self.other_titles = []
@@ -191,25 +190,16 @@ class UbuntuDataset(Dataset):
         if name == 'ubuntu':
             if self.partition == 'train':
                 raw_data = Ubuntu.load_training_data()
-                start_index = 0
-                end_index = len(raw_data)
-                # end_index = len(raw_data)-5000
             elif self.partition in {'dev', 'test'}:
                 raw_data = Ubuntu.load_ubuntu_eval_data(dev_or_test=self.partition)
-                start_index = 0
-                end_index = len(raw_data)
-                # start_index = len(raw_data)-5000
-                # end_index = len(raw_data)
         elif name == 'android':
             if self.partition == 'train':
                 raise RuntimeError("No train data for android dataset")
             elif self.partition in {'dev', 'test'}:
                 raw_data = Ubuntu.load_eval_data(dev_or_test=self.partition)
-                start_index = 0
-                end_index = len(raw_data)
 
         if name == 'ubuntu' and self.partition in {"dev", "test"}:
-            for query_idx, example in enumerate(raw_data[start_index:end_index]):
+            for example in raw_data:
                 query_title = example['query_question']['title']
                 query_body = example['query_question']['body']
 
@@ -222,18 +212,15 @@ class UbuntuDataset(Dataset):
                         self.Y.append(-1)
                     other_title = other_q['title']
                     other_body = other_q['body']
-                    self.query_indices.append(query_idx)
                     self.query_titles.append(query_title)
                     self.query_bodies.append(query_body)
                     self.other_titles.append(other_title)
                     self.other_bodies.append(other_body)
 
-                if not 1 in self.Y[-examples_per_query:]:
-                    print query_idx
                 self.len += examples_per_query
 
         else:
-            for query_idx, example in enumerate(raw_data[start_index:end_index]):
+            for example in raw_data:
                 query_title = example['query_question']['title']
                 query_body = example['query_question']['body']
 
@@ -250,7 +237,6 @@ class UbuntuDataset(Dataset):
                             break # (this happens in eval data)
                     other_title = other_q['title']
                     other_body = other_q['body']
-                    self.query_indices.append(query_idx)
                     self.query_titles.append(query_title)
                     self.query_bodies.append(query_body)
                     self.other_titles.append(other_title)
@@ -261,7 +247,7 @@ class UbuntuDataset(Dataset):
         return self.len
 
     def __getitem__(self, idx):
-        return (self.query_indices[idx], self.query_titles[idx], self.query_bodies[idx],
+        return (self.query_titles[idx], self.query_bodies[idx],
                 self.other_titles[idx], self.other_bodies[idx], self.Y[idx])
 
 def pad(vectorized_seqs, embedding_size=200):
@@ -278,9 +264,9 @@ def pad(vectorized_seqs, embedding_size=200):
     return (seq_tensor, seq_lengths)
 
 def batchify(data):
-    q_indices, q_titles, q_bodies, o_titles, o_bodies, ys = zip(*data)
+    q_titles, q_bodies, o_titles, o_bodies, ys = zip(*data)
     padded_things = map(pad, (q_titles, q_bodies, o_titles, o_bodies))
-    return torch.LongTensor(q_indices), padded_things, torch.LongTensor(ys)
+    return padded_things, torch.LongTensor(ys)
 
 if __name__=='__main__':
     #Demo usage
@@ -303,7 +289,7 @@ if __name__=='__main__':
         collate_fn=batchify
     )
 
-    for i_batch, (q_indices, padded_things, ys) in enumerate(dataloader):
+    for i_batch, (padded_things, ys) in enumerate(dataloader):
         print("batch #{}".format(i_batch)) 
         (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = padded_things
 

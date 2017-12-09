@@ -143,10 +143,10 @@ def main(args):
 
     if args.model_type == 'lstm':
         print "----LSTM----"
-        qr_model = LSTMRetrieval(args.input_size, args.hidden_size, args.num_layers, batch_size=args.batch_size)
+        qr_model = LSTMRetrieval(args.input_size, args.hidden_size, args.num_layers, args.pool, batch_size=args.batch_size)
     elif args.model_type == 'cnn':
         print "----CNN----"
-        qr_model = CNN(args.input_size, args.hidden_size, batch_size=args.batch_size)
+        qr_model = CNN(args.input_size, args.hidden_size, args.pool, batch_size=args.batch_size)
     else: 
         raise RuntimeError('Unknown --model_type')
 
@@ -194,6 +194,7 @@ if __name__=="__main__":
     parser.add_argument('--hidden_size', default=200, type=int)
     parser.add_argument('--input_size', default=200, type=int)
     parser.add_argument('--num_layers', default=3, type=int)
+    parser.add_argument('--pool', default='max', type=str, choices=['max', 'avg'])
 
     # training parameters
     parser.add_argument('--batch_size', default=80, type=int) # constraint: batch_size must be a multiple of other_questions_size

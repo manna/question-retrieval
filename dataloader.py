@@ -196,7 +196,10 @@ class UbuntuDataset(Dataset):
             if self.partition == 'train':
                 raise RuntimeError("No train data for android dataset")
             elif self.partition in {'dev', 'test'}:
-                raw_data = Ubuntu.load_eval_data(dev_or_test=self.partition)
+                raw_data = Ubuntu.load_training_data(
+                    corpus_path='Android-master/corpus.tsv.gz',
+                    path='Android-master/{}.txt'.format(self.partition)
+                )
 
         if name == 'ubuntu' and self.partition in {"dev", "test"}:
             for example in raw_data:

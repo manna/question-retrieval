@@ -138,6 +138,32 @@ class Ubuntu(): #TODO: Rename this.
                 })
         return data
 
+    @staticmethod
+    def load_ubuntu_eval_data(
+        corpus_path='askubuntu-master/text_tokenized.txt.gz',
+        path_stem='askubuntu-master/{}.txt',
+        dev_or_test='dev' 
+        ): # might want to make this same function as load_ubuntu_train_data
+        """
+        Load an evaluation set of:
+        query question, similar question ids, random question ids, BM25 scores of random questions
+        """
+        with open(path_stem.format(dev_or_test)) as f:
+            lines = f.readlines()
+        
+        CORPUS = Ubuntu.load_corpus(path=corpus_path)
+
+        data = []
+        for line in lines:
+            query_question_id, similar_question_ids, random_question_ids, _  = line.split("\t")
+            data.append({
+                'query_question' : CORPUS[query_question_id],
+                'similar_questions' : [CORPUS[id] for id in similar_question_ids.split()],
+                'random_questions' : [CORPUS[id] for id in random_question_ids.split()]
+                })
+
+        return data
+
 from torch.utils.data import Dataset, DataLoader
 
 class UbuntuDataset(Dataset): 
@@ -154,7 +180,6 @@ class UbuntuDataset(Dataset):
         name, partition: ('ubuntu', 'train') | ('ubuntu', 'dev') | 
                          ('android', 'dev') | ('android', 'test')
         """
-        self.query_indices = []
         self.query_titles = []
         self.query_bodies = []
         self.other_titles = []
@@ -162,52 +187,67 @@ class UbuntuDataset(Dataset):
         self.Y = [] # [1, 1, -1, -1, -1, 1, -1, -1 ....]
         self.len = 0 # = len(self.query_vecs) = len(self.other_vecs) = len(self.Y)
         self.partition = partition
-
         if name == 'ubuntu':
-            raw_data = Ubuntu.load_training_data()
             if self.partition == 'train':
-                start_index = 0
-                end_index = len(raw_data)-5000
-            elif self.partition == 'dev':
-                start_index = len(raw_data)-5000
-                end_index = len(raw_data)
+                raw_data = Ubuntu.load_training_data()
+            elif self.partition in {'dev', 'test'}:
+                raw_data = Ubuntu.load_ubuntu_eval_data(dev_or_test=self.partition)
         elif name == 'android':
             if self.partition == 'train':
                 raise RuntimeError("No train data for android dataset")
             elif self.partition in {'dev', 'test'}:
                 raw_data = Ubuntu.load_eval_data(dev_or_test=self.partition)
-                start_index = 0
-                end_index = len(raw_data)
 
-        for query_idx, example in enumerate(raw_data[start_index:end_index]):
-            query_title = example['query_question']['title']
-            query_body = example['query_question']['body']
+        if name == 'ubuntu' and self.partition in {"dev", "test"}:
+            for example in raw_data:
+                query_title = example['query_question']['title']
+                query_body = example['query_question']['body']
 
-            sim_count = len(example['similar_questions'])
-            for i in range(examples_per_query):
-                if i < sim_count:
-                    self.Y.append( 1 )
-                    other_q = example['similar_questions'][i]
-                else:
-                    try:
-                        self.Y.append( -1 )
-                        other_q = example['random_questions'][i]
-                    except: # invalid assumption that there are args.examples_per_query random questions
-                        break # (this happens in eval data)
-                other_title = other_q['title']
-                other_body = other_q['body']
-                self.query_indices.append(query_idx)
-                self.query_titles.append(query_title)
-                self.query_bodies.append(query_body)
-                self.other_titles.append(other_title)
-                self.other_bodies.append(other_body)
-            self.len += examples_per_query
+                sim_count = len(example['similar_questions'])
+                for i in range(examples_per_query):
+                    other_q = example['random_questions'][i]
+                    if other_q in example['similar_questions']:
+                        self.Y.append(1)
+                    else:
+                        self.Y.append(-1)
+                    other_title = other_q['title']
+                    other_body = other_q['body']
+                    self.query_titles.append(query_title)
+                    self.query_bodies.append(query_body)
+                    self.other_titles.append(other_title)
+                    self.other_bodies.append(other_body)
+
+                self.len += examples_per_query
+
+        else:
+            for example in raw_data:
+                query_title = example['query_question']['title']
+                query_body = example['query_question']['body']
+
+                sim_count = len(example['similar_questions'])
+                for i in range(examples_per_query):
+                    if i < sim_count:
+                        self.Y.append( 1 )
+                        other_q = example['similar_questions'][i]
+                    else:
+                        try:
+                            self.Y.append( -1 )
+                            other_q = example['random_questions'][i]
+                        except: # invalid assumption that there are args.examples_per_query random questions
+                            break # (this happens in eval data)
+                    other_title = other_q['title']
+                    other_body = other_q['body']
+                    self.query_titles.append(query_title)
+                    self.query_bodies.append(query_body)
+                    self.other_titles.append(other_title)
+                    self.other_bodies.append(other_body)
+                self.len += examples_per_query
 
     def __len__(self):
         return self.len
 
     def __getitem__(self, idx):
-        return (self.query_indices[idx], self.query_titles[idx], self.query_bodies[idx],
+        return (self.query_titles[idx], self.query_bodies[idx],
                 self.other_titles[idx], self.other_bodies[idx], self.Y[idx])
 
 def pad(vectorized_seqs, embedding_size=200):
@@ -224,9 +264,9 @@ def pad(vectorized_seqs, embedding_size=200):
     return (seq_tensor, seq_lengths)
 
 def batchify(data):
-    q_indices, q_titles, q_bodies, o_titles, o_bodies, ys = zip(*data)
+    q_titles, q_bodies, o_titles, o_bodies, ys = zip(*data)
     padded_things = map(pad, (q_titles, q_bodies, o_titles, o_bodies))
-    return torch.LongTensor(q_indices), padded_things, torch.LongTensor(ys)
+    return padded_things, torch.LongTensor(ys)
 
 if __name__=='__main__':
     #Demo usage
@@ -249,7 +289,7 @@ if __name__=='__main__':
         collate_fn=batchify
     )
 
-    for i_batch, (q_indices, padded_things, ys) in enumerate(dataloader):
+    for i_batch, (padded_things, ys) in enumerate(dataloader):
         print("batch #{}".format(i_batch)) 
         (qt_seq, qt_perm), (qb_seq, qb_perm), (ot_seq, ot_perm), (ob_seq, ob_perm) = padded_things
 

@@ -4,10 +4,11 @@ import torch.nn.functional as F
 from dataloader import create_variable
 
 class CNN(nn.Module):
-    def __init__(self, embedding_dim, hidden_dim, batch_size=None):
+    def __init__(self, embedding_dim, hidden_dim, pool, batch_size=None):
         super(CNN, self).__init__()
 
         self.window_size = 4
+        self.pool = pool
         self.cnn = nn.Sequential(
             nn.Conv1d(embedding_dim, hidden_dim, kernel_size=self.window_size),
             nn.BatchNorm1d(hidden_dim),
@@ -30,7 +31,10 @@ class CNN(nn.Module):
         assert (out.size(2) == seq_lengths.max() # if we padded
                 or out.size(2) == seq_lengths.max() - self.window_size + 1) # if we didn't pad
 
-        out = nn.AvgPool1d(kernel_size=out.size(2))(out)
+        if self.pool == "avg":
+            out = nn.AvgPool1d(kernel_size=out.size(2))(out)
+        else:
+            out = nn.MaxPool1d(kernel_size=out.size(2))(out)
 
         out = out.view(out.size(0), -1)
         return out

@@ -73,7 +73,8 @@ def run_epoch(
         # Classify their domains
         query_domain, other_domain = dc_model(grl(query_embed)), dc_model(grl(other_embed))
         # Compute batch loss
-        target = create_variable(torch.FloatTensor([float(target_domain)]*args.batch_size))
+        # target = create_variable(torch.FloatTensor([float(target_domain)]*args.batch_size))
+        target = create_variable(torch.FloatTensor([float(target_domain)]*other_domain.size(0)))
 
         qr_batch_loss = qr_criterion(query_embed, other_embed, ys)
         qr_total_loss += qr_batch_loss.data[0]

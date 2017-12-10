@@ -9,7 +9,7 @@ from lstm_model import LSTMRetrieval
 from cnn_model import CNN
 import numpy as np
 from collections import defaultdict
-from domain_classifier import DomainClassifier
+from domain_classifier import DomainClassifier, GradientReversalLayer
 from main import MaxMarginCosineSimilarityLoss, get_moving_average
 
 from itertools import repeat, cycle, islice, izip
@@ -69,9 +69,9 @@ def run_epoch(
         query_embed = (query_title + query_body) / 2
         other_embed = (other_title + other_body) / 2
 
+        grl = GradientReversalLayer(args.dc_factor)
         # Classify their domains
-        query_domain, other_domain = dc_model(query_embed), dc_model(other_embed)
-
+        query_domain, other_domain = dc_model(grl(query_embed)), dc_model(grl(other_embed))
         # Compute batch loss
         target = create_variable(torch.FloatTensor([float(target_domain)]*args.batch_size))
 
@@ -81,16 +81,18 @@ def run_epoch(
 
         dc_batch_loss = sum(dc_criterion(predicted_domain, target) 
                             for predicted_domain in [query_domain, other_domain])
+                            # NOTE: not sure you should be considering both query and other
         dc_total_loss += dc_batch_loss.data[0]
         print "avg DC loss for batch {} was {}".format(i_batch, dc_batch_loss.data[0]/queries_per_batch)
         
         if mode == 'train':
+
             if target_domain == 0: # ubuntu. We don't have android training data for QR.
                 qr_batch_loss.backward(retain_graph=True)
-                qr_optimizer.step()
             else:
                 pass # android. 
             dc_batch_loss.backward()
+            qr_optimizer.step()
             dc_optimizer.step()
     qr_avg_loss = qr_total_loss / queries_count
     dc_avg_loss = dc_total_loss / queries_count
@@ -159,7 +161,8 @@ def main(args):
             model.share_memory()
 
     # Loss functions and Optimizers
-    dc_criterion = nn.L1Loss() # TODO: Replace with actual.
+    # dc_criterion = nn.L1Loss() # TODO: Replace with actual.
+    dc_criterion = nn.BCELoss()
     dc_optimizer = torch.optim.SGD(dc_model.parameters(), lr=args.dc_lr)
 
     qr_criterion = MaxMarginCosineSimilarityLoss() # TODO...
@@ -193,7 +196,7 @@ if __name__=="__main__":
     parser.add_argument('--model_type', default='lstm', type=str, choices=['lstm', 'cnn'])
     parser.add_argument('--hidden_size', default=200, type=int)
     parser.add_argument('--input_size', default=200, type=int)
-    parser.add_argument('--num_layers', default=3, type=int)
+    parser.add_argument('--num_layers', default=1, type=int)
     parser.add_argument('--pool', default='max', type=str, choices=['max', 'avg'])
 
     # training parameters
@@ -202,6 +205,7 @@ if __name__=="__main__":
     parser.add_argument('--epochs', default=2, type=int)
     parser.add_argument('--dc_lr', default=0.005, type=float)
     parser.add_argument('--qr_lr', default=0.005, type=float)
+    parser.add_argument('--dc_factor', default=0.5)
 
     # miscellaneous
     parser.add_argument('--val_epoch', default=1, type=int)

@@ -151,10 +151,10 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
                 queries_count += 1 # queries seen in this epoch
 
         if i_batch % args.stats_display_interval == 0:
-            print "average model top1 precision seen so far until batch %i was %f"%(i_batch, model_top1_precision)
-            print "average model top5 precision seen so far until batch %i was %f"%(i_batch, model_top5_precision)
-            print "average model MAP seen so far until batch %i was %f"%(i_batch, model_MAP)
-            print "average model MRR seen so far until batch %i was %f"%(i_batch, model_MRR)
+            print "average model top1 precision seen so far until %s epoch %i batch %i was %f"%(mode, epoch, i_batch, model_top1_precision)
+            print "average model top5 precision seen so far until %s epoch %i batch %i was %f"%(mode, epoch, i_batch, model_top5_precision)
+            print "average model MAP seen so far until %s epoch %i batch %i was %f"%(mode, epoch, i_batch, model_MAP)
+            print "average model MRR seen so far until %s epoch %i batch %i was %f"%(mode, epoch, i_batch, model_MRR)
             if mode == "val":
                 print "average bm25 top1 precision seen so far until batch %i was %f"%(i_batch, bm25_top1_precision)
                 print "average bm25 top5 precision seen so far until batch %i was %f"%(i_batch, bm25_top5_precision)

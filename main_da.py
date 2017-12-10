@@ -183,6 +183,12 @@ def main(args):
                     mode='val'
                 )
 
+    if save:
+        print "Saving Model state to 'DA_Model({}).pth'".format(args)
+        torch.save(model.state_dict(), 'DA_Model({}).pth'.format(args))
+        print "Saving Optimizer state to 'DA_Optimizer({}).pth'".format(args)
+        torch.save(optimizer.state_dict(), 'DA_Optimizer({}).pth'.format(args))
+
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
 
@@ -205,7 +211,7 @@ if __name__=="__main__":
     parser.add_argument('--epochs', default=2, type=int)
     parser.add_argument('--dc_lr', default=0.005, type=float)
     parser.add_argument('--qr_lr', default=0.005, type=float)
-    parser.add_argument('--dc_factor', default=0.5)
+    parser.add_argument('--dc_factor', default=0.8)
 
     # miscellaneous
     parser.add_argument('--val_epoch', default=1, type=int)

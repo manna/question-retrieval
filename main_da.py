@@ -115,7 +115,7 @@ def main(args):
     del args.no_train
     del args.no_evaluate
 
-    print "Initializing Training Data..."
+    print "Initializing Training Datasets..."
     if train:
         ubuntu_train_loader = DataLoader(
             UbuntuDataset(name='ubuntu', partition='train'),
@@ -133,8 +133,9 @@ def main(args):
             num_workers=8,
             collate_fn=batchify,
         )
+    
+    print "Initializing Validation Datasets..."
     if evaluate:
-        print "Initializing Android Dataset..."
         ubuntu_val_loader = DataLoader(
             UbuntuDataset(name='ubuntu', partition='dev'),
             batch_size=args.batch_size, # 20*n -> n questions.

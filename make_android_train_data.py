@@ -11,11 +11,12 @@ for i, k in enumerate(CORPUS):
 	else:
 	    pos[latest_k].append(k)
 
-def preprocess():
-    for query, pos_examples in pos.items():
-        neg_examples = ''
-        line = '\t'.join([query, ' '.join(pos_examples), neg_examples])
-        yield line
+def preprocess(iters):
+    for _ in range(iters):
+        for query, pos_examples in pos.items():
+            neg_examples = ''
+            line = '\t'.join([query, ' '.join(pos_examples), neg_examples])
+            yield line
 
 with open('Android-master/train.txt', 'w') as f:
-    f.write('\n'.join(preprocess()))
+    f.write('\n'.join(preprocess(6)))

@@ -1,10 +1,5 @@
 import gzip
-import numpy as np
 import torch
-import cPickle as pickle
-import collections
-import sys
-import functools
 from IPython import embed
 
 from torch.autograd import Variable
@@ -255,8 +250,12 @@ class UbuntuDataset(Dataset):
         return self.len
 
     def __getitem__(self, idx):
-        return (self.query_titles[idx], self.query_bodies[idx],
+        try:
+            return (self.query_titles[idx], self.query_bodies[idx],
                 self.other_titles[idx], self.other_bodies[idx], self.Y[idx])
+        except IndexError as e:
+            print e
+            return None
 
 def pad(vectorized_seqs, embedding_size=200):
     vectorized_seqs = list(vectorized_seqs)
@@ -272,6 +271,7 @@ def pad(vectorized_seqs, embedding_size=200):
     return (seq_tensor, seq_lengths)
 
 def batchify(data):
+    data = filter(lambda x: x is not None, data) # Dataset.__getitem__ can return None
     q_titles, q_bodies, o_titles, o_bodies, ys = zip(*data)
     padded_things = map(pad, (q_titles, q_bodies, o_titles, o_bodies))
     return padded_things, torch.LongTensor(ys)

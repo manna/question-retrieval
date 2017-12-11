@@ -7,6 +7,7 @@ from lstm_model import LSTMRetrieval
 from cnn_model import CNN
 from domain_classifier import DomainClassifier, GradientReversalLayer
 from main import MaxMarginCosineSimilarityLoss, QuestionRetrievalMetrics, update_metrics_for_batch
+from IPython import embed
 
 from itertools import repeat, cycle, islice, izip
 def roundrobin(*iterables):
@@ -76,7 +77,6 @@ def run_epoch(
             # Compute batch loss
             # target = create_variable(torch.FloatTensor([float(target_domain)]*args.batch_size))
             target = create_variable(torch.FloatTensor([float(target_domain)]*other_domain.size(0)))
-
             qr_batch_loss = qr_criterion(query_embed, other_embed, ys)
             qr_total_loss += qr_batch_loss.data[0]
             print "avg QR loss for batch {} was {}".format(i_batch, qr_batch_loss.data[0]/queries_per_batch)
@@ -133,7 +133,7 @@ def main(args):
     print "Initializing Android Dataset..."
     # Note, Android train data isn't labeled.
     android_train_loader = DataLoader(
-        UbuntuDataset(name='android', partition='dev'), # TODO use train when it becomes availlable
+        UbuntuDataset(name='android', partition='train'), # TODO use train when it becomes availlable
         batch_size=args.batch_size, # 20*n -> n questions.
         shuffle=False,
         num_workers=8,

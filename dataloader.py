@@ -5,6 +5,7 @@ import cPickle as pickle
 import collections
 import sys
 import functools
+from IPython import embed
 
 from torch.autograd import Variable
 def create_variable(tensor):
@@ -90,7 +91,6 @@ class Ubuntu(): #TODO: Rename this.
         ):
 
         CORPUS = Ubuntu.load_corpus(path=corpus_path)         
-
         data = []
         for partition, path in [
             ('similar_questions', path_stem.format(dev_or_test, 'pos')), 
@@ -193,13 +193,18 @@ class UbuntuDataset(Dataset):
             elif self.partition in {'dev', 'test'}:
                 raw_data = Ubuntu.load_ubuntu_eval_data(dev_or_test=self.partition)
         elif name == 'android':
-            if self.partition == 'train':
-                raise RuntimeError("No train data for android dataset")
-            elif self.partition in {'dev', 'test'}:
-                raw_data = Ubuntu.load_training_data(
-                    corpus_path='Android-master/corpus.tsv.gz',
-                    path='Android-master/{}.txt'.format(self.partition)
-                )
+            raw_data = Ubuntu.load_training_data(
+                corpus_path='Android-master/corpus.tsv.gz',
+                path='Android-master/{}.txt'.format(self.partition)
+            )
+            # if self.partition == 'train':
+            #     raise RuntimeError("No train data for android dataset")
+            # elif self.partition in {'dev', 'test'}:
+            #     raw_data = Ubuntu.load_training_data(
+            #         corpus_path='Android-master/corpus.tsv.gz',
+            #         path='Android-master/{}.txt'.format(self.partition)
+            #     )
+
 
         if name == 'ubuntu' and self.partition in {"dev", "test"}:
             for example in raw_data:

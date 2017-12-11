@@ -95,7 +95,7 @@ def update_metrics_for_batch(args, query_embed, other_embed, ys, mode, metrics, 
         bm25_labels = []
 
     # Iterate through the batch to compute precision metrics
-    for i in range(args.batch_size): 
+    for i in range(len(ys)): # Don't do range(args.batch_size) because last batch may not be full 
         element_score = F.cosine_similarity(query_embed[i], other_embed[i], dim=0)
         model_q_results.append((ys.data[i], element_score.data[0]))
         if mode == "val":

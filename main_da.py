@@ -99,7 +99,7 @@ def run_epoch(
         update_metrics_for_batch(args, query_embed, other_embed, ys, mode, qr_metrics, qr_bm25_metrics)
         if i_batch % args.stats_display_interval == 0:
             qr_metrics.display(i_batch)
-            if mode == "val":
+            if mode == "val" and args.dataset == 'ubuntu': # android doesn't have BM25 data
                 print "BM25:"
                 qr_bm25_metrics.display(i_batch)
 
@@ -134,7 +134,7 @@ def main(args):
     print "Initializing Android Dataset..."
     # Note, Android train data isn't labeled.
     android_train_loader = DataLoader(
-        UbuntuDataset(name='android', partition='train'), # TODO use train when it becomes availlable
+        UbuntuDataset(name='android', partition='train'),
         batch_size=args.batch_size, # 20*n -> n questions.
         shuffle=False,
         num_workers=8,

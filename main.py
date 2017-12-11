@@ -161,10 +161,9 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
         update_metrics_for_batch(args, query_embed, other_embed, ys, mode, model_metrics, bm25_metrics)
         if i_batch % args.stats_display_interval == 0:
             model_metrics.display(i_batch)
-            if mode == "val":
+            if mode == "val" and args.dataset == 'ubuntu': # android doesn't have BM25 data
                 print "BM25:"
                 bm25_metrics.display(i_batch)
-
 
     avg_loss = total_loss / model_metrics.queries_count
     print "average {} loss for epoch {} was {}".format(mode, epoch, avg_loss)
@@ -249,8 +248,8 @@ if __name__=="__main__":
     $ python main.py --model_type lstm 
     $ python main.py --model_type cnn
     
-    # Direct transfer, using pretrained model saved_models/M.pth
-    $ python main.py --no-train --dataset android --load M.pth
+    # Direct transfer, using pretrained CNN model saved_models/M.pth
+    $ python main.py --no-train --dataset android --load M.pth --model_type cnn --epochs 1
     """
 
     parser = argparse.ArgumentParser()

@@ -111,7 +111,7 @@ def update_metrics_for_batch(args, query_embed, other_embed, ys, mode, metrics, 
             metrics.queries_count += 1
 
             if mode == "val":
-                bm25_metrics.update(bm25_labels, bm25_metrics)
+                bm25_metrics.update(bm25_labels)
                 bm25_labels = []
                 bm25_metrics.queries_count += 1 # queries seen in this epoch
 
@@ -162,6 +162,7 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
         if i_batch % args.stats_display_interval == 0:
             model_metrics.display(i_batch)
             if mode == "val":
+                print "BM25:"
                 bm25_metrics.display(i_batch)
 
 
@@ -186,9 +187,9 @@ def main(args):
     else:
         raise RuntimeError('Unknown --model_type')
 
-    if load:
-        print "Loading Model state from 'Model({}).pth'".format(args)
-        model.load_state_dict(torch.load('Model({}).pth'.format(args)))
+    if load != '':
+        print "Loading Model state from 'saved_models/{}'".format(load)
+        model.load_state_dict(torch.load('saved_models/{}'.format(load)))
 
     # CUDA
 
@@ -201,31 +202,33 @@ def main(args):
     loss_function = MaxMarginCosineSimilarityLoss()
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
-    if load:
-        print "Loading Optimizer state from 'Optimizer({}).pth'".format(args)
-        optimizer.load_state_dict(torch.load('Optimizer({}).pth'.format(args)))
+    if load != '':
+        print "Loading Optimizer state from 'saved_optimizers/{}'".format(load)
+        optimizer.load_state_dict(torch.load('saved_optimizers/{}'.format(load)))
         optimizer.state = defaultdict(dict, optimizer.state) # https://discuss.pytorch.org/t/saving-and-loading-sgd-optimizer/2536/5
 
     # Data
 
     # training_data = Ubuntu.load_training_data()
     print "Initializing Ubuntu Dataset..."
-    train_dataset = UbuntuDataset(name='ubuntu', partition='train')
-    train_dataloader = DataLoader(
-        train_dataset,
-        batch_size=args.batch_size, # 100*n -> n questions.
-        shuffle=False,
-        num_workers=8,
-        collate_fn=batchify
-    )
-    val_dataset = UbuntuDataset(name='ubuntu', partition='dev')
-    val_dataloader = DataLoader(
-        val_dataset,
-        batch_size=args.batch_size, # 100*n -> n questions.
-        shuffle=False, 
-        num_workers=8,
-        collate_fn=batchify
-    )
+    if train:
+        train_dataset = UbuntuDataset(name=args.dataset, partition='train')
+        train_dataloader = DataLoader(
+            train_dataset,
+            batch_size=args.batch_size, # 100*n -> n questions.
+            shuffle=False,
+            num_workers=8,
+            collate_fn=batchify
+        )
+    if evaluate:
+        val_dataset = UbuntuDataset(name=args.dataset, partition='dev')
+        val_dataloader = DataLoader(
+            val_dataset,
+            batch_size=args.batch_size, # 100*n -> n questions.
+            shuffle=False, 
+            num_workers=8,
+            collate_fn=batchify
+        )
 
     for epoch in xrange(args.epochs):
         if train:
@@ -235,16 +238,25 @@ def main(args):
                 run_epoch(args, val_dataloader, model, loss_function, optimizer, epoch, mode='val')
 
     if save:
-        print "Saving Model state to 'Model({}).pth'".format(args)
-        torch.save(model.state_dict(), 'Model({}).pth'.format(args))
-        print "Saving Optimizer state to 'Optimizer({}).pth'".format(args)
-        torch.save(optimizer.state_dict(), 'Optimizer({}).pth'.format(args))
+        print "Saving Model state to 'saved_models/Model({}).pth'".format(args)
+        torch.save(model.state_dict(), 'saved_models/Model({}).pth'.format(args))
+        print "Saving Optimizer state to 'saved_optimizers/Optimizer({}).pth'".format(args)
+        torch.save(optimizer.state_dict(), 'saved_optimizers/Optimizer({}).pth'.format(args))
 
 if __name__=="__main__":
+    """
+    # Training
+    $ python main.py --model_type lstm 
+    $ python main.py --model_type cnn
+    
+    # Direct transfer, using pretrained model saved_models/M.pth
+    $ python main.py --no-train --dataset android --load M.pth
+    """
+
     parser = argparse.ArgumentParser()
 
     # loading and saving models. 'store_true' flags default to False. 
-    parser.add_argument('--load', action='store_true')
+    parser.add_argument('--load', type=str, default='') # default is don't load.
     parser.add_argument('--save', action='store_true')
     parser.add_argument('--no-train', action='store_true')
     parser.add_argument('--no-evaluate', action='store_true')
@@ -257,6 +269,7 @@ if __name__=="__main__":
     parser.add_argument('--pool', default='max', type=str, choices=['max', 'avg'])
 
     # training parameters
+    parser.add_argument('--dataset', default='ubuntu', type=str, choices=['ubuntu', 'android'])
     parser.add_argument('--batch_size', default=80, type=int) # constraint: batch_size must be a multiple of other_questions_size
     parser.add_argument('--examples_per_query', default=20, type=int) # the number of other questions that we want to have for each query
     parser.add_argument('--epochs', default=10, type=int)

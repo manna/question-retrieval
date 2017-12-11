@@ -196,15 +196,15 @@ def main(args):
                 )
 
     if save:
-        print "Saving Gen Model state to 'DA_Gen_Model({}).pth'".format(args)
-        torch.save(qr_model.state_dict(), 'DA_Gen_Model({}).pth'.format(args))
-        print "Saving Gen Optimizer state to 'DA_Gen_Optimizer({}).pth'".format(args)
-        torch.save(qr_optimizer.state_dict(), 'DA_Gen_Optimizer({}).pth'.format(args))
+        print "Saving Gen Model state to 'saved_models/DA_Gen_Model({}).pth'".format(args)
+        torch.save(qr_model.state_dict(), 'saved_models/DA_Gen_Model({}).pth'.format(args))
+        print "Saving Gen Optimizer state to 'saved_optimizers/DA_Gen_Optimizer({}).pth'".format(args)
+        torch.save(qr_optimizer.state_dict(), 'saved_optimizers/DA_Gen_Optimizer({}).pth'.format(args))
 
-        print "Saving Discrim Model state to 'DA_Discrim_Model({}).pth'".format(args)
-        torch.save(dc_model.state_dict(), 'DA_Discrim_Model({}).pth'.format(args))
-        print "Saving Discrim Optimizer state to 'DA_Discrim_Optimizer({}).pth'".format(args)
-        torch.save(dc_optimizer.state_dict(), 'DA_Discrim_Optimizer({}).pth'.format(args))
+        print "Saving Discrim Model state to 'saved_models/DA_Discrim_Model({}).pth'".format(args)
+        torch.save(dc_model.state_dict(), 'saved_models/DA_Discrim_Model({}).pth'.format(args))
+        print "Saving Discrim Optimizer state to 'saved_optimizers/DA_Discrim_Optimizer({}).pth'".format(args)
+        torch.save(dc_optimizer.state_dict(), 'saved_optimizers/DA_Discrim_Optimizer({}).pth'.format(args))
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()

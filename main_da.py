@@ -115,38 +115,39 @@ def main(args):
     del args.no_train
     del args.no_evaluate
 
-    print "Initializing Ubuntu Dataset..."
-    ubuntu_train_loader = DataLoader(
-        UbuntuDataset(name='ubuntu', partition='train'),
-        batch_size=args.batch_size, # 20*n -> n questions.
-        shuffle=False,
-        num_workers=8,
-        collate_fn=batchify
-    )
-    ubuntu_val_loader = DataLoader(
-        UbuntuDataset(name='ubuntu', partition='dev'),
-        batch_size=args.batch_size, # 20*n -> n questions.
-        shuffle=False,
-        num_workers=8,
-        collate_fn=batchify
-    )
-
-    print "Initializing Android Dataset..."
-    # Note, Android train data isn't labeled.
-    android_train_loader = DataLoader(
-        UbuntuDataset(name='android', partition='train'),
-        batch_size=args.batch_size, # 20*n -> n questions.
-        shuffle=False,
-        num_workers=8,
-        collate_fn=batchify
-    )
-    android_val_loader = DataLoader(
-        UbuntuDataset(name='android', partition='dev'),
-        batch_size=args.batch_size, # 20*n -> n questions.
-        shuffle=False,
-        num_workers=8,
-        collate_fn=batchify
-    )
+    if train:
+        print "Initializing Ubuntu Dataset..."
+        ubuntu_train_loader = DataLoader(
+            UbuntuDataset(name='ubuntu', partition='train'),
+            batch_size=args.batch_size, # 20*n -> n questions.
+            shuffle=False,
+            num_workers=8,
+            collate_fn=batchify,
+        )
+        ubuntu_val_loader = DataLoader(
+            UbuntuDataset(name='ubuntu', partition='dev'),
+            batch_size=args.batch_size, # 20*n -> n questions.
+            shuffle=False,
+            num_workers=8,
+            collate_fn=batchify,
+        )
+    if val:
+        print "Initializing Android Dataset..."
+        # Note, Android train data isn't labeled.
+        android_train_loader = DataLoader(
+            UbuntuDataset(name='android', partition='train'),
+            batch_size=args.batch_size, # 20*n -> n questions.
+            shuffle=False,
+            num_workers=8,
+            collate_fn=batchify,
+        )
+        android_val_loader = DataLoader(
+            UbuntuDataset(name='android', partition='dev'),
+            batch_size=args.batch_size, # 20*n -> n questions.
+            shuffle=False,
+            num_workers=8,
+            collate_fn=batchify,
+        )
 
     # MODELS
 

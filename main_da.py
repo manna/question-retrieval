@@ -98,7 +98,7 @@ def run_epoch(
         update_metrics_for_batch(args, query_embed, other_embed, ys, mode, qr_metrics, qr_bm25_metrics)
         if i_batch % args.stats_display_interval == 0:
             qr_metrics.display(i_batch)
-            if mode == "val" and args.dataset == 'ubuntu': # android doesn't have BM25 data
+            if mode == "val":
                 print "BM25:"
                 qr_bm25_metrics.display(i_batch)
 

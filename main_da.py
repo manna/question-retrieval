@@ -102,7 +102,7 @@ def run_epoch(
                 print "BM25:"
                 qr_bm25_metrics.display(i_batch)
     print "AUC Meter {} final stats for epoch {} was {}".format(mode, epoch, auc_meter.value(0.05))
-    if train:
+    if mode == 'train':
         qr_avg_loss = qr_total_loss / qr_metrics.queries_count
         dc_avg_loss = dc_total_loss / dc_count
         print "average {} QR loss for epoch {} was {}".format(mode, epoch, qr_avg_loss)

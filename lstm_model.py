@@ -57,7 +57,7 @@ class LSTMRetrieval(nn.Module):
         else:
             output = torch.sum(output, dim=0)
             sorted_lengths_variable = create_variable(torch.Tensor(sorted_lengths)) # convert sorted_lengths list to variable
-            avg_output = output * (1/sorted_lengths_variable).unsqueeze(1).expand(self.batch_size, self.hidden_dim)
+            avg_output = output * (1/sorted_lengths_variable).unsqueeze(1).expand(sorted_lengths_variable.size(0), self.hidden_dim)
             return avg_output[orig_idx]
 
     def get_embed(self, seq_tensor, seq_lengths):

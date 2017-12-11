@@ -1,16 +1,12 @@
 import argparse
 import torch
 from torch import nn
-from torch.nn.modules.loss import _Loss
-import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from dataloader import UbuntuDataset, batchify, create_variable
 from lstm_model import LSTMRetrieval
 from cnn_model import CNN
-import numpy as np
-from collections import defaultdict
 from domain_classifier import DomainClassifier, GradientReversalLayer
-from main import MaxMarginCosineSimilarityLoss, get_moving_average
+from main import MaxMarginCosineSimilarityLoss, QuestionRetrievalMetrics, update_metrics_for_batch
 
 from itertools import repeat, cycle, islice, izip
 def roundrobin(*iterables):
@@ -42,9 +38,12 @@ def run_epoch(
     data_and_target_loader = roundrobin(*data_and_target_loaders)
 
     print "Epoch {}".format(epoch)
-    queries_count = 0 # Queries seen so far in this epoch.
     qr_total_loss = 0
     dc_total_loss = 0
+    dc_count = 0
+
+    qr_metrics = QuestionRetrievalMetrics()
+    qr_bm25_metrics = QuestionRetrievalMetrics()
 
     for i_batch, (data, target_domain) in enumerate(data_and_target_loader):
         padded_things, ys = data
@@ -72,21 +71,22 @@ def run_epoch(
         grl = GradientReversalLayer(args.dc_factor)
         # Classify their domains
         query_domain, other_domain = dc_model(grl(query_embed)), dc_model(grl(other_embed))
-        # Compute batch loss
-        # target = create_variable(torch.FloatTensor([float(target_domain)]*args.batch_size))
-        target = create_variable(torch.FloatTensor([float(target_domain)]*other_domain.size(0)))
 
-        qr_batch_loss = qr_criterion(query_embed, other_embed, ys)
-        qr_total_loss += qr_batch_loss.data[0]
-        print "avg QR loss for batch {} was {}".format(i_batch, qr_batch_loss.data[0]/queries_per_batch)
-
-        dc_batch_loss = sum(dc_criterion(predicted_domain, target) 
-                            for predicted_domain in [query_domain, other_domain])
-                            # NOTE: not sure you should be considering both query and other
-        dc_total_loss += dc_batch_loss.data[0]
-        print "avg DC loss for batch {} was {}".format(i_batch, dc_batch_loss.data[0]/queries_per_batch)
-        
         if mode == 'train':
+            # Compute batch loss
+            # target = create_variable(torch.FloatTensor([float(target_domain)]*args.batch_size))
+            target = create_variable(torch.FloatTensor([float(target_domain)]*other_domain.size(0)))
+
+            qr_batch_loss = qr_criterion(query_embed, other_embed, ys)
+            qr_total_loss += qr_batch_loss.data[0]
+            print "avg QR loss for batch {} was {}".format(i_batch, qr_batch_loss.data[0]/queries_per_batch)
+
+            dc_batch_loss = sum(dc_criterion(predicted_domain, target) 
+                                for predicted_domain in [query_domain, other_domain])
+                                # NOTE: not sure you should be considering both query and other
+            dc_total_loss += dc_batch_loss.data[0]
+            print "avg DC loss for batch {} was {}".format(i_batch, dc_batch_loss.data[0]/args.batch_size)
+            dc_count += args.batch_size
 
             if target_domain == 0: # ubuntu. We don't have android training data for QR.
                 qr_batch_loss.backward(retain_graph=True)
@@ -95,8 +95,15 @@ def run_epoch(
             dc_batch_loss.backward()
             qr_optimizer.step()
             dc_optimizer.step()
-    qr_avg_loss = qr_total_loss / queries_count
-    dc_avg_loss = dc_total_loss / queries_count
+
+        update_metrics_for_batch(args, query_embed, other_embed, ys, mode, qr_metrics, qr_bm25_metrics)
+        if i_batch % args.stats_display_interval == 0:
+            qr_metrics.display(i_batch)
+            if mode == "val":
+                qr_bm25_metrics.display(i_batch)
+
+    qr_avg_loss = qr_total_loss / qr_metrics.queries_count
+    dc_avg_loss = dc_total_loss / dc_count
     print "average {} QR loss for epoch {} was {}".format(mode, epoch, qr_avg_loss)
     print "average {} DC loss for epoch {} was {}".format(mode, epoch, dc_avg_loss)
 
@@ -185,10 +192,15 @@ def main(args):
                 )
 
     if save:
-        print "Saving Model state to 'DA_Model({}).pth'".format(args)
-        torch.save(model.state_dict(), 'DA_Model({}).pth'.format(args))
-        print "Saving Optimizer state to 'DA_Optimizer({}).pth'".format(args)
-        torch.save(optimizer.state_dict(), 'DA_Optimizer({}).pth'.format(args))
+        print "Saving Gen Model state to 'DA_Gen_Model({}).pth'".format(args)
+        torch.save(qr_model.state_dict(), 'DA_Gen_Model({}).pth'.format(args))
+        print "Saving Gen Optimizer state to 'DA_Gen_Optimizer({}).pth'".format(args)
+        torch.save(qr_optimizer.state_dict(), 'DA_Gen_Optimizer({}).pth'.format(args))
+
+        print "Saving Discrim Model state to 'DA_Discrim_Model({}).pth'".format(args)
+        torch.save(dc_model.state_dict(), 'DA_Discrim_Model({}).pth'.format(args))
+        print "Saving Discrim Optimizer state to 'DA_Discrim_Optimizer({}).pth'".format(args)
+        torch.save(dc_optimizer.state_dict(), 'DA_Discrim_Optimizer({}).pth'.format(args))
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()

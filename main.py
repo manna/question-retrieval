@@ -111,7 +111,7 @@ def update_metrics_for_batch(args, query_embed, other_embed, ys, mode, metrics, 
             metrics.queries_count += 1
 
             if mode == "val":
-                bm25_metrics.update(bm25_labels, bm25_metrics)
+                bm25_metrics.update(bm25_labels)
                 bm25_labels = []
                 bm25_metrics.queries_count += 1 # queries seen in this epoch
 
@@ -162,6 +162,7 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
         if i_batch % args.stats_display_interval == 0:
             model_metrics.display(i_batch)
             if mode == "val":
+                print "BM25:"
                 bm25_metrics.display(i_batch)
 
 

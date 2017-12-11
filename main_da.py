@@ -7,6 +7,7 @@ from lstm_model import LSTMRetrieval
 from cnn_model import CNN
 from domain_classifier import DomainClassifier, GradientReversalLayer
 from main import MaxMarginCosineSimilarityLoss, QuestionRetrievalMetrics, update_metrics_for_batch
+from meter import AUCMeter
 from IPython import embed
 
 from itertools import repeat, cycle, islice, izip
@@ -45,6 +46,7 @@ def run_epoch(
 
     qr_metrics = QuestionRetrievalMetrics()
     qr_bm25_metrics = QuestionRetrievalMetrics()
+    auc_meter = AUCMeter()
 
     for i_batch, (data, target_domain) in enumerate(data_and_target_loader):
         padded_things, ys = data
@@ -71,19 +73,16 @@ def run_epoch(
 
         grl = GradientReversalLayer(args.dc_factor)
         # Classify their domains
-        query_domain, other_domain = dc_model(grl(query_embed)), dc_model(grl(other_embed))
+        other_domain = dc_model(grl(other_embed))
 
         if mode == 'train':
             # Compute batch loss
-            # target = create_variable(torch.FloatTensor([float(target_domain)]*args.batch_size))
             target = create_variable(torch.FloatTensor([float(target_domain)]*other_domain.size(0)))
             qr_batch_loss = qr_criterion(query_embed, other_embed, ys)
             qr_total_loss += qr_batch_loss.data[0]
             print "avg QR loss for batch {} was {}".format(i_batch, qr_batch_loss.data[0]/queries_per_batch)
-
-            dc_batch_loss = sum(dc_criterion(predicted_domain, target) 
-                                for predicted_domain in [query_domain, other_domain])
-                                # NOTE: not sure you should be considering both query and other
+            dc_batch_loss = dc_criterion(other_domain, target)
+            auc_meter.add(other_domain.data, target.data)
             dc_total_loss += dc_batch_loss.data[0]
             print "avg DC loss for batch {} was {}".format(i_batch, dc_batch_loss.data[0]/args.batch_size)
             dc_count += args.batch_size
@@ -107,6 +106,7 @@ def run_epoch(
     dc_avg_loss = dc_total_loss / dc_count
     print "average {} QR loss for epoch {} was {}".format(mode, epoch, qr_avg_loss)
     print "average {} DC loss for epoch {} was {}".format(mode, epoch, dc_avg_loss)
+    print "AUC Meter {} final stats for epoch {} was {}".format(mode, epoch, auc_meter.value(0.05))
 
 def main(args):
     load, save, train, evaluate = args.load, args.save, not args.no_train, not args.no_evaluate

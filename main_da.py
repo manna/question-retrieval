@@ -45,7 +45,7 @@ def run_epoch(
     dc_count = 0
 
     qr_metrics = QuestionRetrievalMetrics()
-    qr_bm25_metrics = QuestionRetrievalMetrics()
+    qr_bm25_metrics = QuestionRetrievalMetrics() # Not actually relevant .
     auc_meter = AUCMeter()
 
     for i_batch, (data, target_domain) in enumerate(data_and_target_loader):
@@ -95,12 +95,11 @@ def run_epoch(
             qr_optimizer.step()
             dc_optimizer.step()
 
+        # qr_bm25_metrics don't actually mean anything
         update_metrics_for_batch(args, query_embed, other_embed, ys, mode, qr_metrics, qr_bm25_metrics)
         if i_batch % args.stats_display_interval == 0:
             qr_metrics.display(i_batch)
-            if mode == "val":
-                print "BM25:"
-                qr_bm25_metrics.display(i_batch)
+            
     print "AUC Meter {} final stats for epoch {} was {}".format(mode, epoch, auc_meter.value(0.05))
     if mode == 'train':
         qr_avg_loss = qr_total_loss / qr_metrics.queries_count

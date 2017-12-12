@@ -9,7 +9,7 @@ from domain_classifier import DomainClassifier, GradientReversalLayer
 from main import MaxMarginCosineSimilarityLoss, QuestionRetrievalMetrics, update_metrics_for_batch
 from meter import AUCMeter
 from IPython import embed
-
+from collections import defaultdict
 from itertools import repeat, cycle, islice, izip
 def roundrobin(*iterables):
     "roundrobin('ABC', 'D', 'EF') --> A D E B F C"
@@ -161,6 +161,11 @@ def main(args):
     else: 
         raise RuntimeError('Unknown --model_type')
 
+    if load != '':
+        print "Loading Model state from 'saved_models/{}'".format(load)
+        qr_model.load_state_dict(torch.load('saved_models/DA_Gen_Model({}).pth'.format(load)))
+        dc_model.load_state_dict(torch.load('saved_models/DA_Discrim_Model({}).pth'.format(load)))
+
     # CUDA
 
     if torch.cuda.is_available():
@@ -176,6 +181,12 @@ def main(args):
 
     qr_criterion = MaxMarginCosineSimilarityLoss() # TODO...
     qr_optimizer = torch.optim.SGD(qr_model.parameters(), lr=args.qr_lr)
+    if load != '':
+        print "Loading Optimizer state from 'saved_optimizers/{}'".format(load)
+        qr_optimizer.load_state_dict(torch.load('saved_optimizers/DA_Gen_Optimizer({}).pth'.format(load)))
+        qr_optimizer.state = defaultdict(dict, qr_optimizer.state) # https://discuss.pytorch.org/t/saving-and-loading-sgd-optimizer/2536/5
+        dc_optimizer.load_state_dict(torch.load('saved_optimizers/DA_Discrim_Optimizer({}).pth'.format(load)))
+        dc_optimizer.state = defaultdict(dict, dc_optimizer.state)
 
     for epoch in xrange(args.epochs):
         if train:
@@ -206,8 +217,8 @@ def main(args):
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
 
-    # loading and saving models. 'store_true' flags default to False. 
-    parser.add_argument('--load', action='store_true')
+    # loading and saving models. 'store_true' flags default to False.
+    parser.add_argument('--load', type=str, default="Namespace(batch_size=80, dc_factor=0.8, dc_lr=0.005, epochs=10, examples_per_query=20, hidden_size=200, input_size=200, model_type='cnn', num_layers=1, pool='max', qr_lr=0.005, stats_display_interval=1, val_epoch=1)")
     parser.add_argument('--save', action='store_true')
     parser.add_argument('--no-train', action='store_true')
     parser.add_argument('--no-evaluate', action='store_true')

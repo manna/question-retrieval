@@ -221,8 +221,7 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
 
     # loading and saving models. 'store_true' flags default to False.
-    parser.add_argument('--load', type=str, default="")
-    #parser.add_argument('--load', type=str, default="Namespace(batch_size=80, dc_factor=0.8, dc_lr=0.005, epochs=10, examples_per_query=20, hidden_size=200, input_size=200, model_type='cnn', num_layers=1, pool='max', qr_lr=0.005, stats_display_interval=1, val_epoch=1)")
+    parser.add_argument('--load', type=str, default='')
     parser.add_argument('--save', action='store_true')
     parser.add_argument('--no-train', action='store_true')
     parser.add_argument('--no-evaluate', action='store_true')

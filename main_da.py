@@ -45,7 +45,6 @@ def run_epoch(
     dc_count = 0
 
     qr_metrics = QuestionRetrievalMetrics()
-    qr_bm25_metrics = QuestionRetrievalMetrics() # Not actually relevant .
     auc_meter = AUCMeter()
 
     for i_batch, (data, target_domain) in enumerate(data_and_target_loader):
@@ -95,8 +94,7 @@ def run_epoch(
             qr_optimizer.step()
             dc_optimizer.step()
 
-        # qr_bm25_metrics don't actually mean anything
-        update_metrics_for_batch(args, query_embed, other_embed, ys, mode, qr_metrics, qr_bm25_metrics)
+        update_metrics_for_batch(args, query_embed, other_embed, ys, qr_metrics)
         if i_batch % args.stats_display_interval == 0:
             qr_metrics.display(i_batch)
             

@@ -88,17 +88,17 @@ class QuestionRetrievalMetrics():
 def get_moving_average(avg, num_prev_samples, num_new_samples, new_value):
     return float(avg*num_prev_samples + new_value)/(num_prev_samples + num_new_samples)
 
-def update_metrics_for_batch(args, query_embed, other_embed, ys, mode, metrics, bm25_metrics):
+def update_metrics_for_batch(args, query_embed, other_embed, ys, metrics, bm25_metrics=None):
     # Initialize some things at start of batch.
     model_q_results = [] # contains a list of tuples. first element of tuple is ground truth label (1 or -1) of question; 2nd is question score.
-    if mode == "val":
+    if bm25_metrics is not None:
         bm25_labels = []
 
     # Iterate through the batch to compute precision metrics
     for i in range(len(ys)): # Don't do range(args.batch_size) because last batch may not be full 
         element_score = F.cosine_similarity(query_embed[i], other_embed[i], dim=0)
         model_q_results.append((ys.data[i], element_score.data[0]))
-        if mode == "val":
+        if bm25_metrics is not None:
             bm25_labels.append(ys.data[i])
 
         # Done with subbatch
@@ -110,7 +110,7 @@ def update_metrics_for_batch(args, query_embed, other_embed, ys, mode, metrics, 
             model_q_results = [] # Clear model_q_results in prep for next subbatch
             metrics.queries_count += 1
 
-            if mode == "val":
+            if bm25_metrics is not None:
                 bm25_metrics.update(bm25_labels)
                 bm25_labels = []
                 bm25_metrics.queries_count += 1 # queries seen in this epoch
@@ -127,7 +127,9 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
     total_loss = 0
 
     model_metrics = QuestionRetrievalMetrics()
-    bm25_metrics = QuestionRetrievalMetrics() # Used in validation only
+    bm25_metrics = None
+    if mode == "val" and args.dataset == 'ubuntu': # android doesn't have BM25 data
+        bm25_metrics = QuestionRetrievalMetrics() # Used in validation only
 
     for i_batch, (padded_things, ys) in enumerate(train_loader):
         print("Batch #{}".format(i_batch)) 
@@ -158,10 +160,10 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
             batch_loss.backward()
             optimizer.step()
 
-        update_metrics_for_batch(args, query_embed, other_embed, ys, mode, model_metrics, bm25_metrics)
+        update_metrics_for_batch(args, query_embed, other_embed, ys, model_metrics, bm25_metrics=bm25_metrics)
         if i_batch % args.stats_display_interval == 0:
             model_metrics.display(i_batch)
-            if mode == "val" and args.dataset == 'ubuntu': # android doesn't have BM25 data
+            if bm25_metrics is not None:
                 print "BM25:"
                 bm25_metrics.display(i_batch)
 

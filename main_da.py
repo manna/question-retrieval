@@ -29,15 +29,17 @@ def run_epoch(
     dc_model, dc_criterion, dc_optimizer, epoch, mode='train'
     ):
     queries_per_batch = args.batch_size/args.examples_per_query
-
-    if mode == 'train':
-        print "Training..."
-        data_and_target_loaders = [ izip(ubuntu_loader , repeat(0)), 
-                                    izip(android_loader, repeat(1)) ]
-        data_and_target_loader = roundrobin(*data_and_target_loaders)
-    elif mode == 'val':
-        print "Validation..."
-        data_and_target_loader = izip(android_loader, repeat(1))
+    data_and_target_loaders = [ izip(ubuntu_loader , repeat(0)), 
+                                izip(android_loader, repeat(1)) ]
+    data_and_target_loader = roundrobin(*data_and_target_loaders)
+    #if mode == 'train':
+    #    print "Training..."
+    #    data_and_target_loaders = [ izip(ubuntu_loader , repeat(0)), 
+    #                                izip(android_loader, repeat(1)) ]
+    #    data_and_target_loader = roundrobin(*data_and_target_loaders)
+    #elif mode == 'val':
+    #    print "Validation..."
+    #    data_and_target_loader = izip(android_loader, repeat(1))
 
     print "Epoch {}".format(epoch)
     qr_total_loss = 0
@@ -69,19 +71,17 @@ def run_epoch(
 
         query_embed = (query_title + query_body) / 2
         other_embed = (other_title + other_body) / 2
-
         grl = GradientReversalLayer(args.dc_factor)
         # Classify their domains
         other_domain = dc_model(grl(other_embed))
-
+        target = create_variable(torch.FloatTensor([float(target_domain)]*other_domain.size(0)))
+        auc_meter.add(other_domain.data, target.data)
         if mode == 'train':
             # Compute batch loss
-            target = create_variable(torch.FloatTensor([float(target_domain)]*other_domain.size(0)))
             qr_batch_loss = qr_criterion(query_embed, other_embed, ys)
             qr_total_loss += qr_batch_loss.data[0]
             print "avg QR loss for batch {} was {}".format(i_batch, qr_batch_loss.data[0]/queries_per_batch)
             dc_batch_loss = dc_criterion(other_domain, target)
-            auc_meter.add(other_domain.data, target.data)
             dc_total_loss += dc_batch_loss.data[0]
             print "avg DC loss for batch {} was {}".format(i_batch, dc_batch_loss.data[0]/args.batch_size)
             dc_count += args.batch_size
@@ -94,7 +94,10 @@ def run_epoch(
             qr_optimizer.step()
             dc_optimizer.step()
 
-        update_metrics_for_batch(args, query_embed, other_embed, ys, qr_metrics)
+        if mode == "val" and target_domain == 0:
+            pass
+        else:
+            update_metrics_for_batch(args, query_embed, other_embed, ys, qr_metrics)
         if i_batch % args.stats_display_interval == 0:
             qr_metrics.display(i_batch)
             
@@ -218,7 +221,8 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
 
     # loading and saving models. 'store_true' flags default to False.
-    parser.add_argument('--load', type=str, default="Namespace(batch_size=80, dc_factor=0.8, dc_lr=0.005, epochs=10, examples_per_query=20, hidden_size=200, input_size=200, model_type='cnn', num_layers=1, pool='max', qr_lr=0.005, stats_display_interval=1, val_epoch=1)")
+    parser.add_argument('--load', type=str, default="")
+    #parser.add_argument('--load', type=str, default="Namespace(batch_size=80, dc_factor=0.8, dc_lr=0.005, epochs=10, examples_per_query=20, hidden_size=200, input_size=200, model_type='cnn', num_layers=1, pool='max', qr_lr=0.005, stats_display_interval=1, val_epoch=1)")
     parser.add_argument('--save', action='store_true')
     parser.add_argument('--no-train', action='store_true')
     parser.add_argument('--no-evaluate', action='store_true')
@@ -236,7 +240,7 @@ if __name__=="__main__":
     parser.add_argument('--epochs', default=2, type=int)
     parser.add_argument('--dc_lr', default=0.005, type=float)
     parser.add_argument('--qr_lr', default=0.005, type=float)
-    parser.add_argument('--dc_factor', default=0.8)
+    parser.add_argument('--dc_factor', default=200)
 
     # miscellaneous
     parser.add_argument('--val_epoch', default=1, type=int)

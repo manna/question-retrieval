@@ -32,12 +32,12 @@ def run_epoch(
 
     if mode == 'train':
         print "Training..."
+        data_and_target_loaders = [ izip(ubuntu_loader , repeat(0)), 
+                                    izip(android_loader, repeat(1)) ]
+        data_and_target_loader = roundrobin(*data_and_target_loaders)
     elif mode == 'val':
         print "Validation..."
-
-    data_and_target_loaders = [ izip(ubuntu_loader , repeat(0)), 
-                                izip(android_loader, repeat(1)) ]
-    data_and_target_loader = roundrobin(*data_and_target_loaders)
+        data_and_target_loader = izip(android_loader, repeat(1))
 
     print "Epoch {}".format(epoch)
     qr_total_loss = 0
@@ -106,7 +106,7 @@ def run_epoch(
         qr_avg_loss = qr_total_loss / qr_metrics.queries_count
         dc_avg_loss = dc_total_loss / dc_count
         print "average {} QR loss for epoch {} was {}".format(mode, epoch, qr_avg_loss)
-        print "average {} DC loss for epoch {} was {}".format(mode, epoch, dc_avg_loss)
+        print "average {} DC  loss for epoch {} was {}".format(mode, epoch, dc_avg_loss)
 
 def main(args):
     load, save, train, evaluate = args.load, args.save, not args.no_train, not args.no_evaluate

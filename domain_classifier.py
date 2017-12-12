@@ -1,18 +1,29 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Function
 from dataloader import create_variable
 
+class GradReverse(Function):
+    grl_constant = 1.0
+
+    @staticmethod
+    def forward(ctx, x):
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return grad_output.neg() * GradReverse.grl_constant
+
+ 
 class GradientReversalLayer(nn.Module):
-    def __init__(self, grl_constant):
+    def __init__(self):
         super(GradientReversalLayer, self).__init__()
-        self.grl_constant = grl_constant
+        self.f = GradReverse()
 
     def forward(self, x):
-        return x
+        return self.f.apply(x)
 
-    def backward(self, grad_output):
-        return -self.grl_constant * grad_output
 
 class DomainClassifier(nn.Module):
     def __init__(self, input_dim, batch_size=None):

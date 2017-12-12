@@ -70,7 +70,7 @@ def run_epoch(
         query_embed = (query_title + query_body) / 2
         other_embed = (other_title + other_body) / 2
 
-        grl = GradientReversalLayer(args.dc_factor)
+        grl = GradientReversalLayer()
         # Classify their domains
         other_domain = dc_model(grl(other_embed))
 

@@ -25,4 +25,4 @@ def preprocess(iters):
                 yield line
 
 with open('Android-master/train.txt', 'w') as f:
-    f.write('\n'.join(preprocess(6)))
+    f.write('\n'.join(preprocess(5)))

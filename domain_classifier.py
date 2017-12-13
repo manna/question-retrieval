@@ -5,7 +5,7 @@ from torch.autograd import Function
 from dataloader import create_variable
 
 class GradReverse(Function):
-    grl_constant = 1.0
+    grl_constant = 1e-5
 
     @staticmethod
     def forward(ctx, x):
@@ -33,7 +33,8 @@ class DomainClassifier(nn.Module):
         """
         super(DomainClassifier, self).__init__()
         self.net = nn.Sequential(
-            nn.Linear(input_dim, 1),
+            nn.Linear(input_dim, 150),
+            nn.Linear(150, 1),
             nn.Sigmoid()
         )
         # self.net = nn.Sequential(

@@ -239,11 +239,7 @@ if __name__=="__main__":
     parser.add_argument('--epochs', default=2, type=int)
     parser.add_argument('--dc_lr', default=0.005, type=float)
     parser.add_argument('--qr_lr', default=0.005, type=float)
-<<<<<<< Updated upstream
-    # parser.add_argument('--dc_factor', default=200)
-=======
-    parser.add_argument('--dc_factor', default=200)
->>>>>>> Stashed changes
+    parser.add_argument('--dc_factor', default=1e-5)
 
     # miscellaneous
     parser.add_argument('--val_epoch', default=1, type=int)

@@ -2,22 +2,25 @@ import torch
 import torch.nn as nn
 from torch.autograd import Function
 
-class GradReverse(Function):
-    grl_constant = 1e-5
+def GradReverseConstructor(grl_const):
+    class GradReverse(Function):
+        grl_constant = grl_const
+    
+        @staticmethod
+        def forward(ctx, x):
+            return x.view_as(x)
+    
+        @staticmethod
+        def backward(ctx, grad_output):
+            return grad_output.neg() * GradReverse.grl_constant
 
-    @staticmethod
-    def forward(ctx, x):
-        return x.view_as(x)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        return grad_output.neg() * GradReverse.grl_constant
+    return GradReverse
 
  
 class GradientReversalLayer(nn.Module):
-    def __init__(self):
+    def __init__(self, grl_const):
         super(GradientReversalLayer, self).__init__()
-        self.f = GradReverse()
+        self.f = GradReverseConstructor(grl_const)
 
     def forward(self, x):
         return self.f.apply(x)

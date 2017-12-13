@@ -71,7 +71,9 @@ def run_epoch(
 
         query_embed = (query_title + query_body) / 2
         other_embed = (other_title + other_body) / 2
-        grl = GradientReversalLayer(args.dc_factor)
+
+        grl = GradientReversalLayer()
+
         # Classify their domains
         other_domain = dc_model(grl(other_embed))
         target = create_variable(torch.FloatTensor([float(target_domain)]*other_domain.size(0)))
@@ -239,7 +241,7 @@ if __name__=="__main__":
     parser.add_argument('--epochs', default=2, type=int)
     parser.add_argument('--dc_lr', default=0.005, type=float)
     parser.add_argument('--qr_lr', default=0.005, type=float)
-    parser.add_argument('--dc_factor', default=200)
+    # parser.add_argument('--dc_factor', default=200)
 
     # miscellaneous
     parser.add_argument('--val_epoch', default=1, type=int)

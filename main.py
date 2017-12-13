@@ -132,7 +132,7 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
         bm25_metrics = QuestionRetrievalMetrics() # Used in validation only
 
     for i_batch, (padded_things, ys) in enumerate(train_loader):
-        print("Batch #{}".format(i_batch)) 
+        print("Epoch {}, Batch #{}".format(epoch, i_batch)) 
         ys = create_variable(ys)
 
         qt, qb, ot, ob = padded_things # padded_things might also be packed.

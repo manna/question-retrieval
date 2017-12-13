@@ -52,7 +52,7 @@ def run_epoch(
     for i_batch, (data, target_domain) in enumerate(data_and_target_loader):
         padded_things, ys = data
 
-        print "Batch #{}, Domain {}".format(i_batch, target_domain)
+        print "Epoch {}, Batch #{}, Domain {}".format(epoch, i_batch, target_domain)
         ys = create_variable(ys)
 
         qt, qb, ot, ob = padded_things # padded_things might also be packed.

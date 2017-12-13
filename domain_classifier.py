@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.autograd import Function
-from dataloader import create_variable
 
 class GradReverse(Function):
     grl_constant = 1e-5

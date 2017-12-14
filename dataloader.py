@@ -1,6 +1,7 @@
 import gzip
 import torch
 from IPython import embed
+from numpy.random import choice
 
 from torch.autograd import Variable
 def create_variable(tensor):
@@ -221,7 +222,30 @@ class UbuntuDataset(Dataset):
                     self.other_bodies.append(other_body)
 
                 self.len += examples_per_query
+        elif name == 'ubuntu' and self.partition == 'train':
+            for example in raw_data:
+                query_title = example['query_question']['title']
+                query_body = example['query_question']['body']
 
+                sim_count = len(example['similar_questions'])
+                for other_q in example['similar_questions']:
+                    self.Y.append( 1 )
+                    other_title = other_q['title']
+                    other_body = other_q['body']
+                    self.query_titles.append(query_title)
+                    self.query_bodies.append(query_body)
+                    self.other_titles.append(other_title)
+                    self.other_bodies.append(other_body)
+                for other_q in choice(other_q['random_questions'], examples_per_query - sim_count):
+                    self.Y.append( -1 )
+                    other_title = other_q['title']
+                    other_body = other_q['body']
+                    self.query_titles.append(query_title)
+                    self.query_bodies.append(query_body)
+                    self.other_titles.append(other_title)
+                    self.other_bodies.append(other_body)
+
+                self.len += examples_per_query            
         else:
             for example in raw_data:
                 query_title = example['query_question']['title']

@@ -211,27 +211,26 @@ def main(args):
     # Data
 
     # training_data = Ubuntu.load_training_data()
-    print "Initializing Ubuntu Dataset..."
-    if train:
-        train_dataset = UbuntuDataset(name=args.dataset, partition='train')
-        train_dataloader = DataLoader(
+    for epoch in xrange(args.epochs):
+        print "Initializing Ubuntu Dataset..."
+        if train:
+            train_dataset = UbuntuDataset(name=args.dataset, partition='train')
+            train_dataloader = DataLoader(
             train_dataset,
             batch_size=args.batch_size, # 100*n -> n questions.
             shuffle=False,
             num_workers=8,
             collate_fn=batchify
-        )
-    if evaluate:
-        val_dataset = UbuntuDataset(name=args.dataset, partition='dev')
-        val_dataloader = DataLoader(
+            )
+        if evaluate:
+            val_dataset = UbuntuDataset(name=args.dataset, partition='dev')
+            val_dataloader = DataLoader(
             val_dataset,
             batch_size=args.batch_size, # 100*n -> n questions.
             shuffle=False, 
             num_workers=8,
             collate_fn=batchify
-        )
-
-    for epoch in xrange(args.epochs):
+            )
         if train:
             run_epoch(args, train_dataloader, model, loss_function, optimizer, epoch, mode='train')
         if evaluate:

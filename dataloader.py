@@ -227,8 +227,7 @@ class UbuntuDataset(Dataset):
                 query_title = example['query_question']['title']
                 query_body = example['query_question']['body']
 
-                sim_count = len(example['similar_questions'])
-                for other_q in example['similar_questions']:
+                for other_q in choice(example['similar_questions'], 1):
                     self.Y.append( 1 )
                     other_title = other_q['title']
                     other_body = other_q['body']
@@ -236,7 +235,7 @@ class UbuntuDataset(Dataset):
                     self.query_bodies.append(query_body)
                     self.other_titles.append(other_title)
                     self.other_bodies.append(other_body)
-                for other_q in choice(other_q['random_questions'], examples_per_query - sim_count):
+                for other_q in choice(example['random_questions'], examples_per_query - 1):
                     self.Y.append( -1 )
                     other_title = other_q['title']
                     other_body = other_q['body']

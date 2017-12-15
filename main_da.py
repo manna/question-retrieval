@@ -184,7 +184,7 @@ def main(args):
 
     qr_criterion = MaxMarginCosineSimilarityLoss() # TODO...
     qr_optimizer = torch.optim.SGD(qr_model.parameters(), lr=args.qr_lr)
-    if load != '':
+    if load != '' and train:
         print "Loading Optimizer state from 'saved_optimizers/{}'".format(load)
         qr_optimizer.load_state_dict(torch.load('saved_optimizers/DA_Gen_Optimizer({}).pth'.format(load)))
         qr_optimizer.state = defaultdict(dict, qr_optimizer.state) # https://discuss.pytorch.org/t/saving-and-loading-sgd-optimizer/2536/5

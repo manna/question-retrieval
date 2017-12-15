@@ -203,7 +203,7 @@ def main(args):
     loss_function = MaxMarginCosineSimilarityLoss()
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
-    if load != '':
+    if load != '' and train:
         print "Loading Optimizer state from 'saved_optimizers/{}'".format(load)
         optimizer.load_state_dict(torch.load('saved_optimizers/{}'.format(load)))
         optimizer.state = defaultdict(dict, optimizer.state) # https://discuss.pytorch.org/t/saving-and-loading-sgd-optimizer/2536/5

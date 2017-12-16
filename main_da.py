@@ -166,8 +166,8 @@ def main(args):
 
     if load != '':
         print "Loading Model state from 'saved_models/{}'".format(load)
-        qr_model.load_state_dict(torch.load('saved_models/DA_Gen_Model({}).pth'.format(load)))
-        dc_model.load_state_dict(torch.load('saved_models/DA_Discrim_Model({}).pth'.format(load)))
+        qr_model.load_state_dict(torch.load('saved_models/gen_{}'.format(load)))
+        dc_model.load_state_dict(torch.load('saved_models/discrim_{}'.format(load)))
 
     # CUDA
 

@@ -1,13 +1,12 @@
 import argparse
 import torch
-from torch import nn
+# from torch import nn
 from torch.nn.modules.loss import _Loss
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from dataloader import UbuntuDataset, batchify, create_variable
 from lstm_model import LSTMRetrieval
 from cnn_model import CNN
-from IPython import embed
 import numpy as np
 from collections import defaultdict
 
@@ -18,8 +17,10 @@ class MaxMarginCosineSimilarityLoss(_Loss):
 
     def forward(self, queries, others, targets):
         """ 
-        Weakly assumes only one positive example.
-        In that case, this loss function is exactly as described in arxiv 1512.05726
+        Requires that there is at least one positive example.
+
+        If there is exactly 1 positive example:
+            this loss function is exactly as described in arxiv 1512.05726
         """
         batch_size = targets.size()[0]
         min_positive_score = None
@@ -49,11 +50,16 @@ class MaxMarginCosineSimilarityLoss(_Loss):
 
         return sum(max_margin_losses)
 
-def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='train'):
-    def get_moving_average(avg, num_prev_samples, num_new_samples, new_value):
-        return float(avg*num_prev_samples + new_value)/(num_prev_samples + num_new_samples)
+class QuestionRetrievalMetrics():
+    def __init__(self):
+        self.queries_count = 0
 
-    def get_metrics(labels, queries_count, top1_precision, top5_precision, MRR, MAP):
+        self.top1_precision = 0.
+        self.top5_precision = 0.
+        self.MAP = 0.
+        self.MRR = 0.
+
+    def update(self, labels):
         top1_good_count = len([label for label in labels[:1] if label == 1])
         top5_good_count = len([label for label in labels[:5] if label == 1])
         
@@ -68,14 +74,48 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
             current_q_MRR = 0.
             current_q_MAP = 0.
 
+        self.top1_precision = get_moving_average(self.top1_precision, self.queries_count, 1, top1_good_count)
+        self.top5_precision = get_moving_average(self.top5_precision, self.queries_count*5, 5, top5_good_count)
+        self.MRR = get_moving_average(self.MRR, self.queries_count, 1, current_q_MRR)
+        self.MAP = get_moving_average(self.MAP, self.queries_count, 1, current_q_MAP)
 
-        # Update Epoch-level averages
-        top1_precision = get_moving_average(top1_precision, queries_count, 1, top1_good_count)
-        top5_precision = get_moving_average(top5_precision, queries_count*5, 5, top5_good_count)
-        MRR = get_moving_average(MRR, queries_count, 1, current_q_MRR)
-        MAP = get_moving_average(MAP, queries_count, 1, current_q_MAP)
-        return top1_precision, top5_precision, MRR, MAP
-    
+    def display(self, i_batch):
+        print "average model top1 precision seen so far until batch %i was %f"%(i_batch, self.top1_precision)
+        print "average model top5 precision seen so far until batch %i was %f"%(i_batch, self.top5_precision)
+        print "average model MAP seen so far until batch %i was %f"%(i_batch, self.MAP)
+        print "average model MRR seen so far until batch %i was %f"%(i_batch, self.MRR)
+
+def get_moving_average(avg, num_prev_samples, num_new_samples, new_value):
+    return float(avg*num_prev_samples + new_value)/(num_prev_samples + num_new_samples)
+
+def update_metrics_for_batch(args, query_embed, other_embed, ys, metrics, bm25_metrics=None):
+    # Initialize some things at start of batch.
+    model_q_results = [] # contains a list of tuples. first element of tuple is ground truth label (1 or -1) of question; 2nd is question score.
+    if bm25_metrics is not None:
+        bm25_labels = []
+
+    # Iterate through the batch to compute precision metrics
+    for i in range(len(ys)): # Don't do range(args.batch_size) because last batch may not be full 
+        element_score = F.cosine_similarity(query_embed[i], other_embed[i], dim=0)
+        model_q_results.append((ys.data[i], element_score.data[0]))
+        if bm25_metrics is not None:
+            bm25_labels.append(ys.data[i])
+
+        # Done with subbatch
+        if (i + 1) % args.examples_per_query == 0:
+            model_q_results = sorted(model_q_results, key=lambda result: result[1])[::-1]
+            model_q_question_labels, _ = zip(*model_q_results)
+            
+            metrics.update(model_q_question_labels)
+            model_q_results = [] # Clear model_q_results in prep for next subbatch
+            metrics.queries_count += 1
+
+            if bm25_metrics is not None:
+                bm25_metrics.update(bm25_labels)
+                bm25_labels = []
+                bm25_metrics.queries_count += 1 # queries seen in this epoch
+
+def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='train'):    
     queries_per_batch = args.batch_size/args.examples_per_query
 
     if mode == 'train':
@@ -84,21 +124,15 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
         print "Validation..."
 
     print "Epoch {}".format(epoch)
-    queries_count = 0 # Queries seen so far in this epoch.
     total_loss = 0
 
-    model_top1_precision = 0.
-    model_top5_precision = 0.
-    model_MAP = 0.
-    model_MRR = 0.
-    if mode == "val":
-        bm25_top1_precision = 0.
-        bm25_top5_precision = 0.
-        bm25_MAP = 0.
-        bm25_MRR = 0.
+    model_metrics = QuestionRetrievalMetrics()
+    bm25_metrics = None
+    if mode == "val" and args.dataset == 'ubuntu': # android doesn't have BM25 data
+        bm25_metrics = QuestionRetrievalMetrics() # Used in validation only
 
     for i_batch, (padded_things, ys) in enumerate(train_loader):
-        print("Batch #{}".format(i_batch)) 
+        print("Epoch {}, Batch #{}".format(epoch, i_batch)) 
         ys = create_variable(ys)
 
         qt, qb, ot, ob = padded_things # padded_things might also be packed.
@@ -118,55 +152,22 @@ def run_epoch(args, train_loader, model, criterion, optimizer, epoch, mode='trai
         query_embed = (query_title + query_body) / 2
         other_embed = (other_title + other_body) / 2
 
+
         if mode == "train":
             batch_loss = criterion(query_embed, other_embed, ys)
             total_loss += batch_loss.data[0]
             print "avg loss for batch {} was {}".format(i_batch, batch_loss.data[0]/queries_per_batch)
-        
-        # Initialize some things at start of batch.
-        model_q_results = [] # contains a list of tuples. first element of tuple is ground truth label (1 or -1) of question; 2nd is question score.
-        if mode == "val":
-            bm25_labels = []
-        # Iterate through the batch to compute precision metrics
-        for i in range(args.batch_size): 
-            element_score = F.cosine_similarity(query_embed[i], other_embed[i], dim=0)
-            model_q_results.append((ys.data[i], element_score.data[0]))
-            if mode == "val":
-                bm25_labels.append(ys.data[i])
-            # Done with subbatch
-            if (i + 1) % args.examples_per_query == 0:
-
-                model_q_results = sorted(model_q_results, key=lambda result: result[1])[::-1]
-                model_q_question_labels, _ = zip(*model_q_results)
-                model_top1_precision, model_top5_precision, model_MRR, model_MAP = get_metrics(model_q_question_labels, queries_count, model_top1_precision, model_top5_precision, model_MRR, model_MAP)
-
-                if mode == "val":
-                    bm25_top1_precision, bm25_top5_precision, bm25_MRR, bm25_MAP = get_metrics(bm25_labels, queries_count, bm25_top1_precision, bm25_top5_precision, bm25_MRR, bm25_MAP)
-                               
-
-                # Clear model_q_results in prep for next subbatch
-                model_q_results = []
-                if mode == "val":
-                    bm25_labels = []
-                queries_count += 1 # queries seen in this epoch
-
-        if i_batch % args.stats_display_interval == 0:
-            print "average model top1 precision seen so far until %s epoch %i batch %i was %f"%(mode, epoch, i_batch, model_top1_precision)
-            print "average model top5 precision seen so far until %s epoch %i batch %i was %f"%(mode, epoch, i_batch, model_top5_precision)
-            print "average model MAP seen so far until %s epoch %i batch %i was %f"%(mode, epoch, i_batch, model_MAP)
-            print "average model MRR seen so far until %s epoch %i batch %i was %f"%(mode, epoch, i_batch, model_MRR)
-            if mode == "val":
-                print "average bm25 top1 precision seen so far until batch %i was %f"%(i_batch, bm25_top1_precision)
-                print "average bm25 top5 precision seen so far until batch %i was %f"%(i_batch, bm25_top5_precision)
-                print "average bm25 MAP seen so far until batch %i was %f"%(i_batch, bm25_MAP)
-                print "average bm25 MRR seen so far until batch %i was %f"%(i_batch, bm25_MRR)
-
-
-        if mode == 'train':
             batch_loss.backward()
             optimizer.step()
 
-    avg_loss = total_loss / queries_count
+        update_metrics_for_batch(args, query_embed, other_embed, ys, model_metrics, bm25_metrics=bm25_metrics)
+        if i_batch % args.stats_display_interval == 0:
+            model_metrics.display(i_batch)
+            if bm25_metrics is not None:
+                print "BM25:"
+                bm25_metrics.display(i_batch)
+
+    avg_loss = total_loss / model_metrics.queries_count
     print "average {} loss for epoch {} was {}".format(mode, epoch, avg_loss)
 
 def main(args):
@@ -187,10 +188,9 @@ def main(args):
     else:
         raise RuntimeError('Unknown --model_type')
 
-    print load
-    if load:
-        print "Loading Model state from 'Model({}).pth'".format(args)
-        model.load_state_dict(torch.load('Model({}).pth'.format(args)))
+    if load != '':
+        print "Loading Model state from 'saved_models/{}'".format(load)
+        model.load_state_dict(torch.load('saved_models/{}'.format(load)))
 
     # CUDA
 
@@ -203,33 +203,34 @@ def main(args):
     loss_function = MaxMarginCosineSimilarityLoss()
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
-    if load:
-        print "Loading Optimizer state from 'Optimizer({}).pth'".format(args)
-        optimizer.load_state_dict(torch.load('Optimizer({}).pth'.format(args)))
+    if load != '' and train:
+        print "Loading Optimizer state from 'saved_optimizers/{}'".format(load)
+        optimizer.load_state_dict(torch.load('saved_optimizers/{}'.format(load)))
         optimizer.state = defaultdict(dict, optimizer.state) # https://discuss.pytorch.org/t/saving-and-loading-sgd-optimizer/2536/5
 
     # Data
 
     # training_data = Ubuntu.load_training_data()
-    print "Initializing Ubuntu Dataset..."
-    train_dataset = UbuntuDataset(name='ubuntu', partition='train')
-    train_dataloader = DataLoader(
-        train_dataset,
-        batch_size=args.batch_size, # 100*n -> n questions.
-        shuffle=False,
-        num_workers=8,
-        collate_fn=batchify
-    )
-    val_dataset = UbuntuDataset(name='ubuntu', partition='dev')
-    val_dataloader = DataLoader(
-        val_dataset,
-        batch_size=args.batch_size, # 100*n -> n questions.
-        shuffle=False, 
-        num_workers=8,
-        collate_fn=batchify
-    )
-
     for epoch in xrange(args.epochs):
+        print "Initializing Ubuntu Dataset..."
+        if train:
+            train_dataset = UbuntuDataset(name=args.dataset, partition='train')
+            train_dataloader = DataLoader(
+            train_dataset,
+            batch_size=args.batch_size, # 100*n -> n questions.
+            shuffle=False,
+            num_workers=8,
+            collate_fn=batchify
+            )
+        if evaluate:
+            val_dataset = UbuntuDataset(name=args.dataset, partition='dev')
+            val_dataloader = DataLoader(
+            val_dataset,
+            batch_size=args.batch_size, # 100*n -> n questions.
+            shuffle=False, 
+            num_workers=8,
+            collate_fn=batchify
+            )
         if train:
             run_epoch(args, train_dataloader, model, loss_function, optimizer, epoch, mode='train')
         if evaluate:
@@ -237,17 +238,25 @@ def main(args):
                 run_epoch(args, val_dataloader, model, loss_function, optimizer, epoch, mode='val')
 
     if save:
-        print "Saving Model state to 'Model({}).pth'".format(args)
-        torch.save(model.state_dict(), 'Model({}).pth'.format(args))
-        print "Saving Optimizer state to 'Optimizer({}).pth'".format(args)
-        torch.save(optimizer.state_dict(), 'Optimizer({}).pth'.format(args))
-    
+        print "Saving Model state to 'saved_models/Model({}).pth'".format(args)
+        torch.save(model.state_dict(), 'saved_models/Model({}).pth'.format(args))
+        print "Saving Optimizer state to 'saved_optimizers/Optimizer({}).pth'".format(args)
+        torch.save(optimizer.state_dict(), 'saved_optimizers/Optimizer({}).pth'.format(args))
 
 if __name__=="__main__":
+    """
+    # Training
+    $ python main.py --model_type lstm 
+    $ python main.py --model_type cnn
+    
+    # Direct transfer, using pretrained CNN model saved_models/M.pth
+    $ python main.py --no-train --dataset android --load M.pth --model_type cnn --epochs 1
+    """
+
     parser = argparse.ArgumentParser()
 
     # loading and saving models. 'store_true' flags default to False. 
-    parser.add_argument('--load', action='store_true')
+    parser.add_argument('--load', type=str, default='') # default is don't load.
     parser.add_argument('--save', action='store_true')
     parser.add_argument('--no-train', action='store_true')
     parser.add_argument('--no-evaluate', action='store_true')
@@ -260,6 +269,7 @@ if __name__=="__main__":
     parser.add_argument('--pool', default='max', type=str, choices=['max', 'avg'])
 
     # training parameters
+    parser.add_argument('--dataset', default='ubuntu', type=str, choices=['ubuntu', 'android'])
     parser.add_argument('--batch_size', default=80, type=int) # constraint: batch_size must be a multiple of other_questions_size
     parser.add_argument('--examples_per_query', default=20, type=int) # the number of other questions that we want to have for each query
     parser.add_argument('--epochs', default=10, type=int)

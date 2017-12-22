@@ -1,10 +1,7 @@
 import gzip
-import numpy as np
 import torch
-import cPickle as pickle
-import collections
-import sys
-import functools
+from IPython import embed
+from numpy.random import choice
 
 from torch.autograd import Variable
 def create_variable(tensor):
@@ -90,7 +87,6 @@ class Ubuntu(): #TODO: Rename this.
         ):
 
         CORPUS = Ubuntu.load_corpus(path=corpus_path)         
-
         data = []
         for partition, path in [
             ('similar_questions', path_stem.format(dev_or_test, 'pos')), 
@@ -193,10 +189,18 @@ class UbuntuDataset(Dataset):
             elif self.partition in {'dev', 'test'}:
                 raw_data = Ubuntu.load_ubuntu_eval_data(dev_or_test=self.partition)
         elif name == 'android':
-            if self.partition == 'train':
-                raise RuntimeError("No train data for android dataset")
-            elif self.partition in {'dev', 'test'}:
-                raw_data = Ubuntu.load_eval_data(dev_or_test=self.partition)
+            raw_data = Ubuntu.load_training_data(
+                corpus_path='Android-master/corpus.tsv.gz',
+                path='Android-master/{}.txt'.format(self.partition)
+            )
+            # if self.partition == 'train':
+            #     raise RuntimeError("No train data for android dataset")
+            # elif self.partition in {'dev', 'test'}:
+            #     raw_data = Ubuntu.load_training_data(
+            #         corpus_path='Android-master/corpus.tsv.gz',
+            #         path='Android-master/{}.txt'.format(self.partition)
+            #     )
+
 
         if name == 'ubuntu' and self.partition in {"dev", "test"}:
             for example in raw_data:
@@ -218,7 +222,29 @@ class UbuntuDataset(Dataset):
                     self.other_bodies.append(other_body)
 
                 self.len += examples_per_query
+        elif name == 'ubuntu' and self.partition == 'train':
+            for example in raw_data:
+                query_title = example['query_question']['title']
+                query_body = example['query_question']['body']
 
+                for other_q in choice(example['similar_questions'], 1):
+                    self.Y.append( 1 )
+                    other_title = other_q['title']
+                    other_body = other_q['body']
+                    self.query_titles.append(query_title)
+                    self.query_bodies.append(query_body)
+                    self.other_titles.append(other_title)
+                    self.other_bodies.append(other_body)
+                for other_q in choice(example['random_questions'], examples_per_query - 1):
+                    self.Y.append( -1 )
+                    other_title = other_q['title']
+                    other_body = other_q['body']
+                    self.query_titles.append(query_title)
+                    self.query_bodies.append(query_body)
+                    self.other_titles.append(other_title)
+                    self.other_bodies.append(other_body)
+
+                self.len += examples_per_query            
         else:
             for example in raw_data:
                 query_title = example['query_question']['title']
@@ -247,8 +273,12 @@ class UbuntuDataset(Dataset):
         return self.len
 
     def __getitem__(self, idx):
-        return (self.query_titles[idx], self.query_bodies[idx],
+        try:
+            return (self.query_titles[idx], self.query_bodies[idx],
                 self.other_titles[idx], self.other_bodies[idx], self.Y[idx])
+        except IndexError as e:
+            print e
+            return None
 
 def pad(vectorized_seqs, embedding_size=200):
     vectorized_seqs = list(vectorized_seqs)
@@ -264,6 +294,7 @@ def pad(vectorized_seqs, embedding_size=200):
     return (seq_tensor, seq_lengths)
 
 def batchify(data):
+    data = filter(lambda x: x is not None, data) # Dataset.__getitem__ can return None
     q_titles, q_bodies, o_titles, o_bodies, ys = zip(*data)
     padded_things = map(pad, (q_titles, q_bodies, o_titles, o_bodies))
     return padded_things, torch.LongTensor(ys)
